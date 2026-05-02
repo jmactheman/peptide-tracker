@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Peptide Tracker">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="manifest" href="manifest.json">
+    <title>Peptide Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="page-wrap">
+    <header>
+        <div class="header-controls">
+            <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">☀️ Light</button>
+            <button class="icon-btn" onclick="switchTab('settings')" title="Settings">⚙️</button>
+        </div>
+        <h1>💉 Peptide Tracker</h1>
+        <p>Supply management, dosing &amp; cycle tracking</p>
+    </header>
+
+    <!-- Desktop top tabs (hidden on mobile) -->
+    <div class="tabs" id="desktop-tabs">
+        <button class="tab-btn active" data-tab="supply">📦 Supply</button>
+        <button class="tab-btn" data-tab="tracking">💉 Log Dose</button>
+        <button class="tab-btn" data-tab="history">📜 History</button>
+        <button class="tab-btn" data-tab="calendar">📅 Calendar</button>
+        <button class="tab-btn" data-tab="cycles">🔄 Cycles</button>
+        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+    </div>
+
+    <div class="notif-banner" id="notif-banner"></div>
+
+    <!-- ── SUPPLY ─────────────────────────────────────────── -->
+    <div id="supply" class="tab-content active">
+        <div class="card">
+            <h2>Add Peptide to Supply</h2>
+            <form id="peptide-form">
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label>Peptide *</label>
+                        <select id="peptide-select" required></select>
+                    </div>
+                    <div class="form-group full-width" id="custom-name-group" style="display:none;">
+                        <label>Custom Peptide Name *</label>
+                        <input type="text" id="peptide-custom-name" placeholder="e.g. My Peptide">
+                    </div>
+                    <div class="form-group">
+                        <label>Unit</label>
+                        <select id="peptide-unit">
+                            <option value="mg">mg</option>
+                            <option value="IU">IU</option>
+                            <option value="mL">mL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label id="per-vial-label">mg per Vial *</label>
+                        <input type="number" id="peptide-mg" required min="0" step="any" placeholder="e.g. 5">
+                    </div>
+                    <div class="form-group">
+                        <label>Vials per Kit</label>
+                        <input type="number" id="peptide-vpk" min="1" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Kits on Hand *</label>
+                        <input type="number" id="kits-on-hand" required min="0" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label id="dose-label">Your Dose (mcg)</label>
+                        <input type="number" id="daily-dose" step="0.01" min="0" placeholder="e.g. 250">
+                    </div>
+                    <div class="form-group">
+                        <label>Doses per Week</label>
+                        <input type="number" id="doses-per-week" min="1" max="14" value="7">
+                    </div>
+                    <div class="form-group">
+                        <label>Cycle Duration (weeks)</label>
+                        <input type="number" id="cycle-duration" min="1" max="52" placeholder="e.g. 12">
+                    </div>
+                    <div class="form-group">
+                        <label>Syringe Type</label>
+                        <select id="syringe-type">
+                            <option value="U100">U-100 (1 unit = 0.01 mL)</option>
+                            <option value="U50">U-50 (1 unit = 0.02 mL)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Reorder at (vials)</label>
+                        <input type="number" id="reorder-threshold" min="0" value="5">
+                    </div>
+                    <div class="form-group">
+                        <label>Card Color</label>
+                        <div class="color-picker-row" id="supply-color-picker"></div>
+                    </div>
+                </div>
+                <div class="preview-box" id="add-preview" style="display:none;">
+                    <h4 id="preview-name">Preview</h4>
+                    <div class="preview-row"><span>Total Vials:</span><span id="preview-total-vials">-</span></div>
+                    <div class="preview-row"><span id="preview-total-label">Total mg:</span><span id="preview-total-mg">-</span></div>
+                    <div class="preview-row"><span>Est. Supply:</span><span id="preview-supply">-</span></div>
+                    <div class="preview-row"><span>Cycle Dose Total:</span><span id="preview-cycle-total">-</span></div>
+                </div>
+                <div style="margin-top:18px;">
+                    <button type="submit" class="btn-primary">+ Add to Supply</button>
+                </div>
+            </form>
+        </div>
+        <div class="summary-cards" id="supply-summary"></div>
+        <h2 style="margin-bottom:14px;">Your Peptide Supply</h2>
+        <div class="supply-grid" id="supply-grid">
+            <div class="empty-state" style="grid-column:1/-1;"><p>No peptides added yet.</p></div>
+        </div>
+    </div>
+
+    <!-- ── LOG DOSE ───────────────────────────────────────── -->
+    <div id="tracking" class="tab-content">
+        <div class="card">
+            <h2>Log Injection</h2>
+            <form id="dose-form">
+                <div class="form-grid">
+                    <div class="form-group"><label>Date *</label><input type="date" id="dose-date" required></div>
+                    <div class="form-group"><label>Time</label><input type="time" id="dose-time"></div>
+                    <div class="form-group">
+                        <label>Peptide *</label>
+                        <select id="dose-peptide" required>
+                            <option value="">Select from your supply...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label id="log-dose-label">Dose (mcg) *</label>
+                        <input type="number" id="dose-amount" required step="0.01" min="0" placeholder="e.g. 250">
+                    </div>
+                    <div class="form-group">
+                        <label>Injection Site</label>
+                        <select id="injection-site">
+                            <option value="">Select site...</option>
+                            <option>Abdomen - Left</option><option>Abdomen - Right</option>
+                            <option>Thigh - Left</option><option>Thigh - Right</option>
+                            <option>Deltoid - Left</option><option>Deltoid - Right</option>
+                            <option>Glute - Left</option><option>Glute - Right</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Notes</label>
+                        <textarea id="dose-notes" placeholder="Observations, side effects..."></textarea>
+                    </div>
+                </div>
+                <div style="margin-top:18px;">
+                    <button type="submit" class="btn-success">✓ Log Dose</button>
+                </div>
+            </form>
+        </div>
+        <div class="card" id="quick-reference" style="display:none;">
+            <h2>Dosing Reference</h2>
+            <div id="quick-reference-content"></div>
+        </div>
+        <div class="card" id="site-rotation-card">
+            <h2>Injection Site Rotation</h2>
+            <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:4px;">Based on your last 14 logged injections. Rotate sites to reduce tissue stress.</p>
+            <div class="rotation-grid" id="rotation-grid"></div>
+        </div>
+    </div>
+
+    <!-- ── HISTORY ────────────────────────────────────────── -->
+    <div id="history" class="tab-content">
+        <div class="card">
+            <h2>Injection History</h2>
+            <div class="export-bar">
+                <button class="btn-ghost btn-small" onclick="exportCSV()">⬇ Export CSV</button>
+                <input type="text" id="history-search" placeholder="Filter by peptide..." style="padding:6px 10px;font-size:0.85rem;width:200px;">
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead><tr><th>Date</th><th>Time</th><th>Peptide</th><th>Dose</th><th>Site</th><th>Notes</th><th></th></tr></thead>
+                    <tbody id="history-table">
+                        <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── CALENDAR ───────────────────────────────────────── -->
+    <div id="calendar" class="tab-content">
+        <div class="card">
+            <div class="calendar-header">
+                <h2 id="calendar-month-year"></h2>
+                <div class="calendar-nav">
+                    <button class="btn-primary btn-small" id="prev-month">← Prev</button>
+                    <button class="btn-ghost btn-small" id="today-btn">Today</button>
+                    <button class="btn-primary btn-small" id="next-month">Next →</button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+    </div>
+
+    <!-- ── CYCLES ─────────────────────────────────────────── -->
+    <div id="cycles" class="tab-content">
+        <div class="card">
+            <h2>Cycle Timeline</h2>
+            <div class="cycle-controls">
+                <button class="btn-ghost btn-small" id="gantt-scroll-left">◀ Earlier</button>
+                <span id="gantt-range-label" style="font-size:0.85rem;color:var(--text-secondary);"></span>
+                <button class="btn-ghost btn-small" id="gantt-scroll-right">Later ▶</button>
+                <span style="flex:1;"></span>
+                <span style="font-size:0.78rem;color:var(--text-secondary);">
+                    <span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;margin-right:4px;"></span>Active&nbsp;
+                    <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;margin:0 4px 0 10px;"></span>Completed&nbsp;
+                    <span style="display:inline-block;width:2px;height:10px;background:var(--danger);margin:0 4px 0 10px;"></span>Today
+                </span>
+            </div>
+            <div class="gantt-container"><div class="gantt-wrapper" id="gantt-wrapper"></div></div>
+        </div>
+        <div class="card">
+            <h2>Cycle Details</h2>
+            <div id="cycle-details-list"><div class="empty-state"><p>No cycles started yet.</p></div></div>
+        </div>
+    </div>
+
+    <!-- ── SETTINGS ───────────────────────────────────────── -->
+    <div id="settings" class="tab-content">
+        <div class="card">
+            <h2>⚙️ Settings</h2>
+
+            <div class="settings-section">
+                <h3>Appearance</h3>
+                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                    <span style="color:var(--text-secondary);font-size:0.9rem;">Current theme:</span>
+                    <button class="btn-ghost btn-small" onclick="toggleTheme()" id="settings-theme-btn">Switch to Light Mode</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Protocol Templates</h3>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Save a named collection of peptides with dose schedules. Apply a template to add multiple peptides to supply at once.</p>
+                <button class="btn-primary btn-small" onclick="openCreateProtocolModal()">+ Create Protocol Template</button>
+                <div id="protocol-templates-list" style="margin-top:16px;"></div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Data Backup &amp; Restore</h3>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export all your data as a JSON file for safekeeping, or restore from a previous backup.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn-ghost btn-small" onclick="backupData()">⬇ Backup Data</button>
+                    <button class="btn-ghost btn-small" onclick="document.getElementById('restore-file').click()">⬆ Restore Data</button>
+                    <input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreData(event)">
+                    <button class="btn-danger btn-small" onclick="clearAllData()">🗑️ Clear All Data</button>
+                </div>
+                <div class="tip-box" style="margin-top:12px;">Data is stored locally in your browser. Regular backups protect against data loss.</div>
+            </div>
+        </div>
+    </div>
+</div><!-- end .page-wrap -->
+
+<!-- ── MOBILE BOTTOM NAV ──────────────────────────────────── -->
+<nav class="bottom-nav" id="bottom-nav">
+    <button class="bnav-btn active" data-tab="supply">
+        <span class="bnav-icon">📦</span>
+        <span class="bnav-label">Supply</span>
+    </button>
+    <button class="bnav-btn" data-tab="tracking">
+        <span class="bnav-icon">💉</span>
+        <span class="bnav-label">Log</span>
+    </button>
+    <button class="bnav-btn" data-tab="calendar">
+        <span class="bnav-icon">📅</span>
+        <span class="bnav-label">Calendar</span>
+    </button>
+    <button class="bnav-btn" data-tab="cycles">
+        <span class="bnav-icon">🔄</span>
+        <span class="bnav-label">Cycles</span>
+    </button>
+    <button class="bnav-btn" data-tab="history">
+        <span class="bnav-icon">📜</span>
+        <span class="bnav-label">History</span>
+    </button>
+</nav>
+
+<!-- ── MODALS ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="reconstitute-modal">
+    <div class="modal">
+        <h2>💧 Reconstitute Vial</h2>
+        <form id="reconstitute-form">
+            <input type="hidden" id="recon-peptide-id">
+            <div class="form-group">
+                <label>Water Type</label>
+                <select id="water-type">
+                    <option value="BAC">Bacteriostatic Water (BAC)</option>
+                    <option value="AA">Acetic Acid (AA)</option>
+                    <option value="Sterile">Sterile Water</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-top:14px;">
+                <label>Amount of Water (mL)</label>
+                <input type="number" id="water-ml" step="0.1" min="0.1" required placeholder="e.g. 2">
+            </div>
+            <div id="recon-preview" style="margin-top:14px;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost btn-small" onclick="closeModal('reconstitute-modal')">Cancel</button>
+                <button type="submit" class="btn-success">Reconstitute</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+        <h2>✏️ Edit Supply</h2>
+        <form id="edit-form">
+            <input type="hidden" id="edit-id">
+            <div class="form-grid">
+                <div class="form-group"><label>Vials on Hand</label><input type="number" id="edit-vials" required min="0"></div>
+                <div class="form-group"><label id="edit-dose-label">Your Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
+                <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
+                <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
+                <div class="form-group">
+                    <label>Syringe Type</label>
+                    <select id="edit-syringe">
+                        <option value="U100">U-100 (1 unit = 0.01 mL)</option>
+                        <option value="U50">U-50 (1 unit = 0.02 mL)</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
+            </div>
+            <div class="form-group" style="margin-top:14px;">
+                <label>Card Color</label>
+                <div class="color-picker-row" id="edit-color-picker"></div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost btn-small" onclick="closeModal('edit-modal')">Cancel</button>
+                <button type="submit" class="btn-success">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="cycle-modal">
+    <div class="modal">
+        <h2>🔄 Cycle Details</h2>
+        <div id="cycle-modal-content"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('cycle-modal')">Close</button>
+            <button type="button" class="btn-danger btn-small" id="cycle-end-btn" style="display:none;">End Cycle</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="protocol-modal">
+    <div class="modal">
+        <h2>📋 Create Protocol Template</h2>
+        <div class="form-group" style="margin-bottom:14px;">
+            <label>Template Name *</label>
+            <input type="text" id="proto-name" placeholder="e.g. Injury Stack">
+        </div>
+        <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:10px;">Select peptides from your current supply to include:</p>
+        <div id="proto-peptide-list" style="max-height:280px;overflow-y:auto;"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('protocol-modal')">Cancel</button>
+            <button type="button" class="btn-success" onclick="saveProtocolTemplate()">Save Template</button>
+        </div>
+    </div>
+</div>
+
+<script src="data.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

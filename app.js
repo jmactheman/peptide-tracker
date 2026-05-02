@@ -1,0 +1,1108 @@
+'use strict';
+
+// ── STATE ────────────────────────────────────────────────────
+var appData = {
+    peptides:  [],
+    doses:     [],
+    cycles:    [],
+    protocols: [],
+    settings:  { theme: 'dark' }
+};
+
+var selectedColor     = PEPTIDE_COLORS[0];
+var editSelectedColor = PEPTIDE_COLORS[0];
+
+async function loadAllData() {
+    appData.peptides  = await dbGetAll('peptides');
+    appData.doses     = await dbGetAll('doses');
+    appData.cycles    = await dbGetAll('cycles');
+    appData.protocols = await dbGetAll('protocols');
+    var s = await dbGet('settings', 'app_settings');
+    if (s) appData.settings = s;
+}
+
+// ── HELPERS ──────────────────────────────────────────────────
+function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+function isIU(p) { return p && p.unit === 'IU'; }
+function doseUnit(p) { return isIU(p) ? 'IU' : 'mcg'; }
+function mlToUnits(ml, t) { return t === 'U50' ? ml * 50 : ml * 100; }
+function getPeptideColor(p) { return (p && p.color) ? p.color : 'var(--accent)'; }
+
+function escapeHtml(s) {
+    if (typeof s !== 'string') return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function fmtDate(s) {
+    return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+}
+function fmtDateShort(d) {
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
+}
+function fmtDateTime(iso) {
+    return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function calcDaysRemaining(p) {
+    if (!p.dailyDose || !p.dosesPerWeek) return null;
+    var vc    = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    var total = p.vialsOnHand * vc;
+    var daily = p.dailyDose * (p.dosesPerWeek / 7);
+    if (!daily) return null;
+    return Math.floor(total / daily);
+}
+
+function daysClass(d) {
+    if (d === null) return '';
+    if (d <= 7)  return 'days-crit';
+    if (d <= 21) return 'days-warn';
+    return 'days-ok';
+}
+
+function calcReconInfo(p) {
+    if (!p.reconstituted) return null;
+    var wml   = p.reconstituted.waterMl;
+    var total = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    var pml   = total / wml;
+    var dose  = p.dailyDose || 0;
+    var ml    = dose > 0 ? dose / pml : 0;
+    var rem   = (p.reconstituted.remainingUnits !== undefined) ? p.reconstituted.remainingUnits : total;
+    return {
+        waterMl: wml, totalUnits: total, unitsPerMl: pml, concentration: pml / 100,
+        remainingUnits: rem, mlPerDose: ml,
+        syringeU100: mlToUnits(ml, 'U100'), syringeU50: mlToUnits(ml, 'U50'),
+        dosesRemaining: dose > 0 ? Math.floor(rem / dose) : 0,
+        unit: isIU(p) ? 'IU' : 'mcg'
+    };
+}
+
+function calcSupplyStr(p) {
+    if (!p.dailyDose) return 'N/A';
+    var vc     = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    var total  = p.vialsOnHand * vc;
+    var weekly = p.dailyDose * p.dosesPerWeek;
+    if (!weekly) return 'N/A';
+    var w = total / weekly;
+    return w < 1 ? Math.round(w * 7) + ' days' : '~' + w.toFixed(1) + ' weeks';
+}
+
+function calcPostCycleProjection(p, cycle) {
+    if (!p.dailyDose || !p.cycleDuration) return null;
+    var end = new Date(cycle.startDate + 'T00:00:00');
+    end.setDate(end.getDate() + p.cycleDuration * 7);
+    var today = new Date(); today.setHours(0,0,0,0);
+    var dr  = Math.max(0, Math.ceil((end - today) / 86400000));
+    var ur  = p.dailyDose * (p.dosesPerWeek / 7) * dr;
+    var vc  = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    return { postVials: Math.max(0, Math.floor(p.vialsOnHand - ur / vc)), daysRemaining: dr };
+}
+
+// ── THEME ────────────────────────────────────────────────────
+function toggleTheme() {
+    var next = appData.settings.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    document.getElementById('theme-btn').textContent          = next === 'dark' ? '☀️ Light' : '🌙 Dark';
+    document.getElementById('settings-theme-btn').textContent = next === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    appData.settings.theme = next;
+    dbPut('settings', { id: 'app_settings', theme: next });
+}
+
+function applyTheme() {
+    var t = appData.settings.theme || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    document.getElementById('theme-btn').textContent          = t === 'dark' ? '☀️ Light' : '🌙 Dark';
+    document.getElementById('settings-theme-btn').textContent = t === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+}
+
+// ── LOW STOCK BANNER ─────────────────────────────────────────
+function checkLowStockNotification() {
+    var low    = appData.peptides.filter(function(p) { return p.vialsOnHand <= p.reorderThreshold; });
+    var banner = document.getElementById('notif-banner');
+    if (low.length) {
+        banner.textContent = '⚠️ Low stock: ' + low.map(function(p) { return p.name; }).join(', ');
+        banner.classList.add('show');
+    } else {
+        banner.classList.remove('show');
+    }
+}
+
+// ── COLOR PICKER ─────────────────────────────────────────────
+function buildColorPicker(containerId, onSelect, currentColor) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    PEPTIDE_COLORS.forEach(function(c) {
+        var sw = document.createElement('div');
+        sw.className = 'color-swatch' + (c === (currentColor || PEPTIDE_COLORS[0]) ? ' selected' : '');
+        sw.style.background = c;
+        sw.title = c;
+        sw.onclick = function() {
+            container.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('selected'); });
+            sw.classList.add('selected');
+            onSelect(c);
+        };
+        container.appendChild(sw);
+    });
+}
+
+// ── TAB NAVIGATION ───────────────────────────────────────────
+function switchTab(tabId) {
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+    var target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
+
+    // Update desktop top tabs
+    document.querySelectorAll('#desktop-tabs .tab-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+
+    // Update bottom nav (settings has no bnav button — that's fine)
+    document.querySelectorAll('.bnav-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+
+    // Lazy-render tabs that need fresh data
+    if (tabId === 'calendar')  renderCalendar();
+    if (tabId === 'cycles')    renderCycles();
+    if (tabId === 'tracking')  renderSiteRotation();
+    if (tabId === 'settings')  renderProtocolTemplatesList();
+}
+
+// Wire desktop top tabs
+document.querySelectorAll('#desktop-tabs .tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+});
+
+// Wire bottom nav
+document.querySelectorAll('.bnav-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+});
+
+// ── PEPTIDE DROPDOWN (replaces catalog) ──────────────────────
+function initPeptideDropdown() {
+    var sel    = document.getElementById('peptide-select');
+    var sorted = PEPTIDE_NAMES.slice().sort();
+    sel.innerHTML =
+        '<option value="">Choose a peptide...</option>' +
+        sorted.map(function(n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') +
+        '<option value="__custom">+ Custom (type below)...</option>';
+    buildColorPicker('supply-color-picker', function(c) { selectedColor = c; }, PEPTIDE_COLORS[0]);
+}
+
+document.getElementById('peptide-select').addEventListener('change', function() {
+    var val         = this.value;
+    var customGroup = document.getElementById('custom-name-group');
+    customGroup.style.display = (val === '__custom') ? 'block' : 'none';
+
+    if (val !== '__custom' && val !== '') {
+        var unitSel = document.getElementById('peptide-unit');
+        if (IU_DEFAULTS.has(val))      unitSel.value = 'IU';
+        else if (ML_DEFAULTS.has(val)) unitSel.value = 'mL';
+        else                           unitSel.value = 'mg';
+    }
+    updateDoseLabelFromUnit();
+    updateAddPreview();
+});
+
+document.getElementById('peptide-unit').addEventListener('change', function() {
+    updateDoseLabelFromUnit();
+    updateAddPreview();
+});
+
+function updateDoseLabelFromUnit() {
+    var unit = document.getElementById('peptide-unit').value;
+    document.getElementById('dose-label').textContent    = 'Your Dose (' + (unit === 'mg' ? 'mcg' : unit) + ')';
+    document.getElementById('per-vial-label').textContent = unit + ' per Vial *';
+}
+
+['peptide-mg','peptide-vpk','kits-on-hand','daily-dose','doses-per-week','cycle-duration'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', updateAddPreview);
+});
+
+function getFormPeptideName() {
+    var sel = document.getElementById('peptide-select').value;
+    return sel === '__custom'
+        ? document.getElementById('peptide-custom-name').value.trim()
+        : sel;
+}
+
+function clearPreview() {
+    document.getElementById('add-preview').style.display = 'none';
+}
+
+function updateAddPreview() {
+    var name  = getFormPeptideName();
+    var unit  = document.getElementById('peptide-unit').value;
+    var mg    = parseFloat(document.getElementById('peptide-mg').value);
+    var vpk   = parseInt(document.getElementById('peptide-vpk').value) || 10;
+    var kits  = parseInt(document.getElementById('kits-on-hand').value) || 0;
+    var dose  = parseFloat(document.getElementById('daily-dose').value) || 0;
+    var dpw   = parseInt(document.getElementById('doses-per-week').value) || 7;
+    var cd    = parseInt(document.getElementById('cycle-duration').value) || 0;
+
+    if (!name || !mg) { clearPreview(); return; }
+
+    var tv   = kits * vpk;
+    var ta   = tv * mg;
+    var isiu = (unit === 'IU');
+
+    document.getElementById('preview-name').textContent        = name;
+    document.getElementById('preview-total-label').textContent = 'Total ' + unit + ':';
+    document.getElementById('preview-total-vials').textContent = tv;
+    document.getElementById('preview-total-mg').textContent    = ta + ' ' + unit;
+
+    var se = 'N/A', ct = 'N/A';
+    if (dose > 0) {
+        var totalUnits = isiu ? ta : ta * 1000;
+        var weekly     = dose * dpw;
+        if (weekly > 0) {
+            var w = totalUnits / weekly;
+            se = w < 1 ? Math.round(w * 7) + ' days' : '~' + w.toFixed(1) + ' weeks';
+        }
+        if (cd > 0) ct = (dose * dpw * cd).toFixed(0) + ' ' + (isiu ? 'IU' : 'mcg');
+    }
+    document.getElementById('preview-supply').textContent      = se;
+    document.getElementById('preview-cycle-total').textContent = ct;
+    document.getElementById('add-preview').style.display = 'block';
+}
+
+// ── ADD PEPTIDE ───────────────────────────────────────────────
+document.getElementById('peptide-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var name = getFormPeptideName();
+    if (!name) { alert('Enter a peptide name.'); return; }
+    var unit   = document.getElementById('peptide-unit').value;
+    var mg     = parseFloat(document.getElementById('peptide-mg').value);
+    var vpk    = parseInt(document.getElementById('peptide-vpk').value) || 10;
+    var kits   = parseInt(document.getElementById('kits-on-hand').value) || 1;
+
+    if (!mg || mg <= 0) { alert('Enter a valid amount per vial.'); return; }
+
+    var p = {
+        id: genId(), name: name, mgPerVial: mg, unit: unit, vialsPerKit: vpk,
+        vialsOnHand: kits * vpk,
+        dailyDose:       parseFloat(document.getElementById('daily-dose').value) || 0,
+        dosesPerWeek:    parseInt(document.getElementById('doses-per-week').value) || 7,
+        cycleDuration:   parseInt(document.getElementById('cycle-duration').value) || 0,
+        syringeType:     document.getElementById('syringe-type').value,
+        reorderThreshold:parseInt(document.getElementById('reorder-threshold').value) || 5,
+        color: selectedColor, reconstituted: null, createdAt: new Date().toISOString()
+    };
+
+    try {
+        await dbPut('peptides', p);
+        appData.peptides.push(p);
+    } catch(err) {
+        alert('Failed to save peptide: ' + err.message);
+        return;
+    }
+
+    renderSupply();
+    updateDoseDropdown();
+    checkLowStockNotification();
+
+    // Reset form
+    document.getElementById('peptide-select').value = '';
+    document.getElementById('peptide-custom-name').value = '';
+    document.getElementById('custom-name-group').style.display = 'none';
+    document.getElementById('peptide-unit').value = 'mg';
+    document.getElementById('peptide-mg').value   = '';
+    document.getElementById('peptide-vpk').value  = 10;
+    document.getElementById('kits-on-hand').value = 1;
+    document.getElementById('daily-dose').value   = '';
+    document.getElementById('cycle-duration').value = '';
+    document.getElementById('doses-per-week').value  = 7;
+    document.getElementById('reorder-threshold').value = 5;
+    document.getElementById('dose-label').textContent    = 'Your Dose (mcg)';
+    document.getElementById('per-vial-label').textContent = 'mg per Vial *';
+    selectedColor = PEPTIDE_COLORS[0];
+    buildColorPicker('supply-color-picker', function(c) { selectedColor = c; }, PEPTIDE_COLORS[0]);
+    clearPreview();
+});
+
+// ── RENDER SUPPLY ─────────────────────────────────────────────
+function getStockStatus(p) {
+    if (p.vialsOnHand === 0)               return { txt:'OUT', cls:'status-critical' };
+    if (p.vialsOnHand <= p.reorderThreshold) return { txt:'LOW', cls:'status-low' };
+    return { txt:'OK', cls:'status-good' };
+}
+
+function renderSupply() {
+    var grid    = document.getElementById('supply-grid');
+    var summary = document.getElementById('supply-summary');
+
+    if (!appData.peptides.length) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p>No peptides added yet.</p></div>';
+        summary.innerHTML = '';
+        return;
+    }
+
+    var tv = appData.peptides.reduce(function(s,p) { return s + p.vialsOnHand; }, 0);
+    var ls = appData.peptides.filter(function(p) { return p.vialsOnHand <= p.reorderThreshold; }).length;
+    var ac = (appData.cycles || []).filter(function(c) { return c.status === 'active'; }).length;
+
+    summary.innerHTML =
+        '<div class="summary-card"><div class="summary-card-value">' + appData.peptides.length + '</div><div class="summary-card-label">Peptides</div></div>' +
+        '<div class="summary-card"><div class="summary-card-value">' + tv + '</div><div class="summary-card-label">Total Vials</div></div>' +
+        '<div class="summary-card"><div class="summary-card-value" style="color:' + (ls > 0 ? 'var(--warning)' : 'var(--success)') + '">' + ls + '</div><div class="summary-card-label">Low Stock</div></div>' +
+        '<div class="summary-card"><div class="summary-card-value" style="color:var(--purple)">' + ac + '</div><div class="summary-card-label">Active Cycles</div></div>';
+
+    var html = '';
+    appData.peptides.forEach(function(p) {
+        var st     = getStockStatus(p);
+        var sup    = calcSupplyStr(p);
+        var ri     = calcReconInfo(p);
+        var acyc   = (appData.cycles || []).find(function(c) { return c.peptideId === p.id && c.status === 'active'; });
+        var proj   = acyc ? calcPostCycleProjection(p, acyc) : null;
+        var du     = doseUnit(p);
+        var pColor = getPeptideColor(p);
+        var eName  = escapeHtml(p.name);
+
+        var syH = '';
+        if (ri && p.dailyDose) {
+            var lb = p.syringeType === 'U50' ? 'U-50' : 'U-100';
+            var u  = p.syringeType === 'U50' ? ri.syringeU50 : ri.syringeU100;
+            syH = '<div class="syringe-display">' +
+                  '<span class="syringe-badge">' + u.toFixed(1) + ' units on ' + lb + '</span>' +
+                  '<span class="syringe-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">U-100: ' + ri.syringeU100.toFixed(1) + ' | U-50: ' + ri.syringeU50.toFixed(1) + '</span>' +
+                  '</div>';
+        }
+
+        var projHtml = '';
+        if (proj) {
+            var pc = proj.postVials <= p.reorderThreshold ? 'var(--warning)' : 'var(--success)';
+            projHtml = '<div class="peptide-info-row" style="background:rgba(59,130,246,0.06);border-radius:4px;padding:6px 4px;">' +
+                       '<span class="info-label">After Cycle</span>' +
+                       '<span class="info-value" style="color:' + pc + '">~' + proj.postVials + ' vials' + (proj.postVials <= p.reorderThreshold ? ' ⚠️' : '') + ' left</span></div>';
+        }
+
+        var reconHtml = '';
+        if (ri) {
+            reconHtml = '<div class="recon-section"><strong style="color:var(--success);">✓ Active Reconstituted Vial</strong>' +
+                        '<div class="dose-calc">' +
+                        '<p>' + ri.waterMl + ' mL ' + escapeHtml(p.reconstituted.waterType) + ' — <span class="highlight">' + ri.concentration.toFixed(2) + ' ' + ri.unit + '/unit</span></p>' +
+                        '<p>Remaining: <span class="highlight">' + ri.remainingUnits.toFixed(1) + ' ' + ri.unit + '</span> (' + ri.dosesRemaining + ' doses)</p>' +
+                        '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> for ' + p.dailyDose + ' ' + du + '</p>' +
+                        syH + '</div></div>';
+        }
+
+        html += '<div class="peptide-card ' + (acyc ? 'has-active-cycle' : '') + '" style="border-color:' + pColor + '40;">' +
+            '<h3><span class="color-dot" style="background:' + pColor + ';"></span>' + eName + (acyc ? ' <span class="status-badge status-cycle">● Active</span>' : '') + '</h3>' +
+            '<div class="peptide-info">' +
+            '<div class="peptide-info-row"><span class="info-label">Vials on Hand</span><span class="info-value">' + p.vialsOnHand + ' <span class="status-badge ' + st.cls + '">' + st.txt + '</span></span></div>' +
+            '<div class="peptide-info-row"><span class="info-label">Size</span><span class="info-value">' + p.mgPerVial + ' ' + p.unit + '/vial</span></div>' +
+            '<div class="peptide-info-row"><span class="info-label">Your Dose</span><span class="info-value">' + (p.dailyDose || '—') + ' ' + du + ' × ' + p.dosesPerWeek + '/wk</span></div>' +
+            '<div class="peptide-info-row"><span class="info-label">Cycle Duration</span><span class="info-value">' + (p.cycleDuration ? p.cycleDuration + ' weeks' : '—') + '</span></div>' +
+            '<div class="peptide-info-row"><span class="info-label">Est. Supply</span><span class="info-value">' + sup + '</span></div>' +
+            projHtml + '</div>' +
+            reconHtml +
+            '<div class="peptide-actions">' +
+            (!ri ? '<button class="btn-primary btn-small" onclick="openReconstitute(\'' + p.id + '\')">💧 Reconstitute</button>'
+                 : '<button class="btn-warning btn-small" onclick="finishVial(\'' + p.id + '\')">✓ Finish Vial</button>') +
+            ' <button class="btn-ghost btn-small" onclick="openEdit(\'' + p.id + '\')">✏️ Edit</button>' +
+            ' <button class="btn-danger btn-small" onclick="deletePeptide(\'' + p.id + '\')">🗑️</button>' +
+            '</div></div>';
+    });
+    grid.innerHTML = html;
+}
+
+// ── RECONSTITUTE ─────────────────────────────────────────────
+function openReconstitute(id) {
+    document.getElementById('recon-peptide-id').value = id;
+    document.getElementById('water-ml').value = '';
+    document.getElementById('recon-preview').innerHTML = '';
+    document.getElementById('reconstitute-modal').classList.add('active');
+}
+
+document.getElementById('water-ml').addEventListener('input', function() {
+    var id  = document.getElementById('recon-peptide-id').value;
+    var ml  = parseFloat(this.value);
+    var p   = appData.peptides.find(function(x) { return x.id === id; });
+    var pre = document.getElementById('recon-preview');
+    if (!p || !ml || ml <= 0) { pre.innerHTML = ''; return; }
+
+    var total = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    var pml   = total / ml;
+    var du    = isIU(p) ? 'IU' : 'mcg';
+    var dose  = p.dailyDose || 0;
+    var mpd   = dose > 0 ? dose / pml : 0;
+    var doses = dose > 0 ? Math.floor(total / dose) : 0;
+
+    pre.innerHTML = '<div class="dose-calc"><p><strong>After reconstitution with ' + ml + ' mL:</strong></p>' +
+        '<p>Concentration: <span class="highlight">' + (pml / 100).toFixed(2) + ' ' + du + ' per unit</span></p>' +
+        (dose > 0
+            ? '<p>For ' + dose + ' ' + du + ': draw <span class="highlight">' + mpd.toFixed(3) + ' mL</span></p>' +
+              '<p>→ U-100: <span class="highlight-green">' + mlToUnits(mpd,'U100').toFixed(1) + ' units</span></p>' +
+              '<p>→ U-50:  <span class="highlight-purple">' + mlToUnits(mpd,'U50').toFixed(1) + ' units</span></p>' +
+              '<p>Doses per vial: <span class="highlight">' + doses + '</span></p>'
+            : '') +
+        '</div>';
+});
+
+document.getElementById('reconstitute-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var id = document.getElementById('recon-peptide-id').value;
+    var p  = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p) return;
+    var total = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    p.reconstituted = {
+        waterType:        document.getElementById('water-type').value,
+        waterMl:          parseFloat(document.getElementById('water-ml').value),
+        remainingUnits:   total,
+        reconstitutedAt:  new Date().toISOString()
+    };
+    try { await dbPut('peptides', p); } catch(err) { alert('Save failed: ' + err.message); return; }
+    renderSupply();
+    closeModal('reconstitute-modal');
+});
+
+async function finishVial(id) {
+    var p = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p || !confirm('Mark this ' + p.name + ' vial as finished?')) return;
+    p.reconstituted = null;
+    p.vialsOnHand   = Math.max(0, p.vialsOnHand - 1);
+    try { await dbPut('peptides', p); } catch(err) { alert('Save failed: ' + err.message); return; }
+    renderSupply();
+    updateDoseDropdown();
+    checkLowStockNotification();
+}
+
+// ── EDIT ─────────────────────────────────────────────────────
+function openEdit(id) {
+    var p = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p) return;
+    document.getElementById('edit-id').value         = id;
+    document.getElementById('edit-vials').value      = p.vialsOnHand;
+    document.getElementById('edit-dose').value       = p.dailyDose;
+    document.getElementById('edit-dpw').value        = p.dosesPerWeek;
+    document.getElementById('edit-cycle-dur').value  = p.cycleDuration || '';
+    document.getElementById('edit-syringe').value    = p.syringeType || 'U100';
+    document.getElementById('edit-reorder').value    = p.reorderThreshold || 5;
+    document.getElementById('edit-dose-label').textContent = 'Your Dose (' + doseUnit(p) + ')';
+    editSelectedColor = p.color || PEPTIDE_COLORS[0];
+    buildColorPicker('edit-color-picker', function(c) { editSelectedColor = c; }, editSelectedColor);
+    document.getElementById('edit-modal').classList.add('active');
+}
+
+document.getElementById('edit-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var id = document.getElementById('edit-id').value;
+    var p  = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p) return;
+    p.vialsOnHand      = parseInt(document.getElementById('edit-vials').value);
+    p.dailyDose        = parseFloat(document.getElementById('edit-dose').value) || 0;
+    p.dosesPerWeek     = parseInt(document.getElementById('edit-dpw').value) || 7;
+    p.cycleDuration    = parseInt(document.getElementById('edit-cycle-dur').value) || 0;
+    p.syringeType      = document.getElementById('edit-syringe').value;
+    p.reorderThreshold = parseInt(document.getElementById('edit-reorder').value) || 5;
+    p.color            = editSelectedColor;
+    try { await dbPut('peptides', p); } catch(err) { alert('Save failed: ' + err.message); return; }
+    renderSupply();
+    updateDoseDropdown();
+    checkLowStockNotification();
+    closeModal('edit-modal');
+});
+
+async function deletePeptide(id) {
+    var p = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p || !confirm('Delete ' + p.name + '?')) return;
+
+    // Collect cycles to delete BEFORE filtering them out of memory (bug fix)
+    var cyclesToDel = (appData.cycles || []).filter(function(c) { return c.peptideId === id; });
+
+    appData.peptides = appData.peptides.filter(function(x) { return x.id !== id; });
+    appData.cycles   = (appData.cycles || []).filter(function(c) { return c.peptideId !== id; });
+
+    try {
+        await dbDelete('peptides', id);
+        for (var i = 0; i < cyclesToDel.length; i++) {
+            await dbDelete('cycles', cyclesToDel[i].id);
+        }
+    } catch(err) { alert('Delete failed: ' + err.message); }
+
+    renderSupply();
+    updateDoseDropdown();
+    checkLowStockNotification();
+}
+
+// ── CYCLES ────────────────────────────────────────────────────
+function startCycle(peptideId, date) {
+    if (!appData.cycles) appData.cycles = [];
+    if (appData.cycles.find(function(c) { return c.peptideId === peptideId && c.status === 'active'; })) return;
+    var p = appData.peptides.find(function(x) { return x.id === peptideId; });
+    if (!p) return;
+    var ped = null;
+    if (p.cycleDuration) {
+        var d = new Date(date + 'T00:00:00');
+        d.setDate(d.getDate() + p.cycleDuration * 7);
+        ped = d.toISOString().split('T')[0];
+    }
+    var cycle = {
+        id: genId(), peptideId: peptideId, peptideName: p.name,
+        color: p.color || 'var(--accent)', startDate: date,
+        endDate: null, plannedDuration: p.cycleDuration || 0,
+        plannedEndDate: ped, status: 'active', createdAt: new Date().toISOString()
+    };
+    appData.cycles.push(cycle);
+    dbPut('cycles', cycle);
+}
+
+async function endCycle(cycleId) {
+    var cycle = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
+    if (!cycle) return;
+    cycle.status  = 'completed';
+    cycle.endDate = new Date().toISOString().split('T')[0];
+    // Note: vials are already decremented per-dose via reconstituted.remainingUnits / finishVial.
+    // Do NOT double-decrement here.
+    try { await dbPut('cycles', cycle); } catch(err) { alert('Save failed: ' + err.message); return; }
+    renderSupply();
+    renderCycles();
+    closeModal('cycle-modal');
+}
+
+function getCycleDoses(cycleId) {
+    var cycle = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
+    if (!cycle) return [];
+    return (appData.doses || []).filter(function(d) {
+        return d.peptideId === cycle.peptideId &&
+               d.date >= cycle.startDate &&
+               (!cycle.endDate || d.date <= cycle.endDate);
+    });
+}
+
+var ganttWindowStart = null, GANTT_WEEKS = 26;
+
+function renderCycles() {
+    renderGantt(appData.cycles || []);
+    renderCycleDetails(appData.cycles || []);
+}
+
+function renderGantt(cycles) {
+    var wrapper = document.getElementById('gantt-wrapper');
+    var rl      = document.getElementById('gantt-range-label');
+    if (!cycles.length) { wrapper.innerHTML = '<div class="empty-state"><p>No cycles yet.</p></div>'; rl.textContent = ''; return; }
+
+    if (!ganttWindowStart) {
+        var earliest = cycles.reduce(function(m,c) { return c.startDate < m ? c.startDate : m; }, cycles[0].startDate);
+        var d = new Date(earliest + 'T00:00:00'); d.setDate(d.getDate() - 14);
+        ganttWindowStart = d;
+    }
+
+    var we    = new Date(ganttWindowStart.getTime() + GANTT_WEEKS * 7 * 86400000);
+    var tm    = GANTT_WEEKS * 7 * 86400000;
+    var today = new Date(); today.setHours(0,0,0,0);
+    rl.textContent = fmtDateShort(ganttWindowStart) + ' — ' + fmtDateShort(we);
+
+    var mm = [], cur = new Date(ganttWindowStart.getFullYear(), ganttWindowStart.getMonth(), 1);
+    while (cur < we) {
+        var pct = ((cur - ganttWindowStart) / tm) * 100;
+        if (pct >= 0 && pct <= 100) mm.push({ label: cur.toLocaleDateString('en-US',{month:'short',year:'2-digit'}), pct: pct });
+        cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+
+    var mh = mm.map(function(m) { return '<div class="gantt-month-label" style="left:' + m.pct.toFixed(1) + '%;">' + m.label + '</div>'; }).join('');
+    var gl = mm.map(function(m) { return '<div class="gantt-grid-line" style="left:' + m.pct.toFixed(1) + '%;"></div>'; }).join('');
+    var tp = ((today - ganttWindowStart) / tm) * 100;
+    var tl = (tp >= 0 && tp <= 100) ? '<div class="gantt-today-line" style="left:' + tp.toFixed(1) + '%;"></div>' : '';
+
+    var bp = {};
+    cycles.forEach(function(c) { if (!bp[c.peptideId]) bp[c.peptideId] = []; bp[c.peptideId].push(c); });
+
+    var rows = '';
+    Object.keys(bp).forEach(function(pid) {
+        var pcs   = bp[pid];
+        var pName = escapeHtml(pcs[0].peptideName);
+        var bars  = pcs.map(function(c) {
+            var sd  = new Date(c.startDate + 'T00:00:00');
+            var ed  = c.endDate ? new Date(c.endDate + 'T00:00:00')
+                    : c.plannedEndDate ? new Date(c.plannedEndDate + 'T00:00:00')
+                    : new Date(today.getTime() + 7 * 86400000);
+            var lp  = ((sd - ganttWindowStart) / tm) * 100;
+            var wp  = ((ed - sd) / tm) * 100;
+            if (lp > 100 || lp + wp < 0) return '';
+            var cl  = Math.max(0, lp);
+            var cw  = Math.min(100 - cl, wp - (cl - lp));
+            var cnt = getCycleDoses(c.id).length;
+            return '<div class="gantt-bar ' + (c.status === 'active' ? 'active' : 'completed') +
+                   '" style="left:' + cl.toFixed(1) + '%;width:' + Math.max(0.5, cw).toFixed(1) + '%;background:' + (c.color || 'var(--accent)') + ';"' +
+                   ' title="' + pName + ': ' + c.startDate + ' (' + cnt + ' doses)"' +
+                   ' onclick="openCycleModal(\'' + c.id + '\')">' +
+                   (c.status === 'active' ? '● ' : '') + cnt + ' doses</div>';
+        }).join('');
+        rows += '<div class="gantt-row"><div class="gantt-row-label"><strong>' + pName + '</strong><small>' + pcs.length + ' cycle' + (pcs.length > 1 ? 's' : '') + '</small></div>' +
+                '<div class="gantt-track">' + gl + tl + bars + '</div></div>';
+    });
+
+    wrapper.innerHTML = '<div class="gantt-header"><div class="gantt-label-col">Peptide</div><div class="gantt-months">' + mh + '</div></div>' + rows;
+}
+
+function renderCycleDetails(cycles) {
+    var container = document.getElementById('cycle-details-list');
+    if (!cycles.length) { container.innerHTML = '<div class="empty-state"><p>No cycles yet.</p></div>'; return; }
+
+    var sorted = cycles.slice().sort(function(a,b) { return b.startDate.localeCompare(a.startDate); });
+    var html   = '';
+    sorted.forEach(function(c) {
+        var doses  = getCycleDoses(c.id);
+        var p      = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+        var start  = new Date(c.startDate + 'T00:00:00');
+        var today  = new Date(); today.setHours(0,0,0,0);
+        var endD   = c.endDate ? new Date(c.endDate + 'T00:00:00') : today;
+        var elapsed= Math.ceil((endD - start) / 86400000);
+        var pct    = c.plannedDuration ? Math.min(100, (elapsed / (c.plannedDuration * 7)) * 100) : null;
+        var totalU = doses.reduce(function(s,d) { return s + d.amount; }, 0);
+        var du     = p ? doseUnit(p) : 'mcg';
+        var sColor = c.status === 'active' ? 'var(--success)' : 'var(--accent)';
+        var barColor = c.color || 'var(--success)';
+
+        var progHtml = pct !== null
+            ? '<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">Week ' + (elapsed/7).toFixed(1) + ' of ' + c.plannedDuration + ' (' + pct.toFixed(0) + '% complete)</div>' +
+              '<div class="cycle-progress-bar"><div class="cycle-progress-fill" style="width:' + pct + '%;background:' + barColor + ';"></div></div>'
+            : '<div style="font-size:0.82rem;color:var(--text-secondary);">Week ' + (elapsed/7).toFixed(1) + ' elapsed</div>';
+
+        var vc        = p ? (isIU(p) ? p.mgPerVial : p.mgPerVial * 1000) : 1000;
+        var vialsUsed = p ? '<div class="cycle-stat"><div class="cycle-stat-value">' + (totalU / vc).toFixed(2) + '</div><div class="cycle-stat-label">Vials Used</div></div>' : '';
+
+        var projHtml = '';
+        if (p && c.status === 'active') {
+            var proj = calcPostCycleProjection(p, c);
+            if (proj) {
+                var rw = proj.postVials <= p.reorderThreshold ? ' — <span style="color:var(--warning);">⚠️ Reorder</span>' : '';
+                projHtml = '<div class="supply-projection">📊 Post-Cycle: ~' + proj.postVials + ' vials remaining' + rw +
+                           '<br><small style="color:var(--text-secondary);">' + proj.daysRemaining + ' days remaining</small></div>';
+            }
+        }
+
+        var endBtn = c.status === 'active'
+            ? '<div style="margin-top:12px;"><button class="btn-danger btn-small" onclick="openCycleModal(\'' + c.id + '\')">End Cycle</button></div>'
+            : '';
+
+        html += '<div class="cycle-detail-card">' +
+            '<div class="cycle-detail-header">' +
+            '<div><strong style="font-size:1.05rem;">' + escapeHtml(c.peptideName) + '</strong>' +
+            '<span class="status-badge" style="background:rgba(255,255,255,0.07);color:' + sColor + ';margin-left:8px;">' + c.status.toUpperCase() + '</span></div>' +
+            '<div style="font-size:0.82rem;color:var(--text-secondary);">' + fmtDate(c.startDate) + ' → ' + (c.endDate ? fmtDate(c.endDate) : c.plannedEndDate ? fmtDate(c.plannedEndDate) + ' (planned)' : 'Ongoing') + '</div></div>' +
+            progHtml +
+            '<div class="cycle-stats">' +
+            '<div class="cycle-stat"><div class="cycle-stat-value">' + doses.length + '</div><div class="cycle-stat-label">Doses</div></div>' +
+            '<div class="cycle-stat"><div class="cycle-stat-value">' + elapsed + '</div><div class="cycle-stat-label">Days</div></div>' +
+            '<div class="cycle-stat"><div class="cycle-stat-value">' + totalU.toFixed(0) + '</div><div class="cycle-stat-label">Total ' + du + '</div></div>' +
+            vialsUsed + '</div>' + projHtml + endBtn + '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function openCycleModal(cycleId) {
+    var cycle  = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
+    if (!cycle) return;
+    var endBtn = document.getElementById('cycle-end-btn');
+    document.getElementById('cycle-modal-content').innerHTML =
+        '<p><strong>' + escapeHtml(cycle.peptideName) + '</strong></p>' +
+        '<p style="color:var(--text-secondary);font-size:0.88rem;margin-top:6px;">Started: ' + fmtDate(cycle.startDate) +
+        '<br>Status: ' + cycle.status + '<br>Doses: ' + getCycleDoses(cycleId).length + '</p>';
+    endBtn.style.display = cycle.status === 'active' ? 'inline-block' : 'none';
+    endBtn.onclick = function() { if (confirm('End ' + cycle.peptideName + ' cycle?')) endCycle(cycleId); };
+    document.getElementById('cycle-modal').classList.add('active');
+}
+
+document.getElementById('gantt-scroll-left').addEventListener('click', function() {
+    if (ganttWindowStart) { ganttWindowStart = new Date(ganttWindowStart.getTime() - 28 * 86400000); renderGantt(appData.cycles || []); }
+});
+document.getElementById('gantt-scroll-right').addEventListener('click', function() {
+    if (ganttWindowStart) { ganttWindowStart = new Date(ganttWindowStart.getTime() + 28 * 86400000); renderGantt(appData.cycles || []); }
+});
+
+// ── DOSE LOG ──────────────────────────────────────────────────
+function updateDoseDropdown() {
+    var sel = document.getElementById('dose-peptide');
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">Select from your supply...</option>' +
+        (appData.peptides || []).map(function(p) {
+            return '<option value="' + p.id + '">' + escapeHtml(p.name) + ' (' + p.mgPerVial + p.unit + ')' + (p.reconstituted ? ' ✓' : '') + '</option>';
+        }).join('');
+    if ((appData.peptides || []).find(function(x) { return x.id === cur; })) sel.value = cur;
+}
+
+document.getElementById('dose-peptide').addEventListener('change', function() {
+    var id  = this.value;
+    var ref = document.getElementById('quick-reference');
+    var cnt = document.getElementById('quick-reference-content');
+    if (!id) { ref.style.display = 'none'; return; }
+    var p = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p) { ref.style.display = 'none'; return; }
+
+    var du = doseUnit(p);
+    document.getElementById('log-dose-label').textContent = 'Dose (' + du + ') *';
+    if (p.dailyDose) document.getElementById('dose-amount').value = p.dailyDose;
+
+    if (p.reconstituted) {
+        var ri = calcReconInfo(p);
+        var lb = p.syringeType === 'U50' ? 'U-50' : 'U-100';
+        var u  = p.syringeType === 'U50' ? ri.syringeU50 : ri.syringeU100;
+        cnt.innerHTML = '<div class="dose-calc">' +
+            '<p><strong>' + escapeHtml(p.name) + '</strong> — Active vial</p>' +
+            '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> for ' + p.dailyDose + ' ' + du + '</p>' +
+            '<p>' + lb + ': <span class="highlight">' + u.toFixed(1) + ' units</span> &nbsp;|&nbsp; U-100: ' + ri.syringeU100.toFixed(1) + ' | U-50: ' + ri.syringeU50.toFixed(1) + '</p>' +
+            '<p>Remaining: ' + ri.remainingUnits.toFixed(1) + ' ' + du + ' (' + ri.dosesRemaining + ' doses)</p></div>';
+    } else {
+        cnt.innerHTML = '<div class="dose-calc" style="border:1px solid var(--warning);background:rgba(245,158,11,0.08);"><p><strong>⚠️ ' + escapeHtml(p.name) + ' not reconstituted.</strong></p></div>';
+    }
+    ref.style.display = 'block';
+});
+
+document.getElementById('dose-date').valueAsDate = new Date();
+
+document.getElementById('dose-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var id = document.getElementById('dose-peptide').value;
+    var p  = appData.peptides.find(function(x) { return x.id === id; });
+    if (!p) { alert('Select a peptide.'); return; }
+
+    var amount    = parseFloat(document.getElementById('dose-amount').value);
+    var doseDate  = document.getElementById('dose-date').value;
+
+    if (p.reconstituted) {
+        var totalUnits = (p.reconstituted.remainingUnits !== undefined)
+            ? p.reconstituted.remainingUnits
+            : (isIU(p) ? p.mgPerVial : p.mgPerVial * 1000);
+        p.reconstituted.remainingUnits = Math.max(0, totalUnits - amount);
+        if (totalUnits - amount <= 0) {
+            alert(p.name + ' vial is now empty.');
+            p.reconstituted = null;
+            p.vialsOnHand   = Math.max(0, p.vialsOnHand - 1);
+        }
+        try { await dbPut('peptides', p); } catch(err) { alert('Save failed: ' + err.message); return; }
+    }
+
+    var hasActive = (appData.cycles || []).some(function(c) { return c.peptideId === id && c.status === 'active'; });
+    if (!hasActive && p.cycleDuration) startCycle(id, doseDate);
+
+    var dose = {
+        id: genId(), peptideId: id, peptideName: p.name,
+        date: doseDate,
+        time:  document.getElementById('dose-time').value || null,
+        amount: amount, unit: doseUnit(p),
+        site:  document.getElementById('injection-site').value || null,
+        notes: document.getElementById('dose-notes').value.trim() || null,
+        loggedAt: new Date().toISOString()
+    };
+
+    try {
+        await dbPut('doses', dose);
+        appData.doses.push(dose);
+    } catch(err) { alert('Save failed: ' + err.message); return; }
+
+    renderSupply();
+    renderHistory();
+    renderSiteRotation();
+
+    document.getElementById('dose-peptide').value     = '';
+    document.getElementById('dose-amount').value      = '';
+    document.getElementById('injection-site').value   = '';
+    document.getElementById('dose-notes').value       = '';
+    document.getElementById('log-dose-label').textContent = 'Dose (mcg) *';
+    document.getElementById('quick-reference').style.display = 'none';
+    checkLowStockNotification();
+});
+
+// ── INJECTION SITE ROTATION ───────────────────────────────────
+function renderSiteRotation() {
+    var grid   = document.getElementById('rotation-grid');
+    var recent = appData.doses.slice().sort(function(a,b) {
+        return b.date.localeCompare(a.date) || ((b.time||'').localeCompare(a.time||''));
+    }).slice(0, 14);
+
+    var lastUsed = {};
+    recent.forEach(function(d,i) { if (d.site && lastUsed[d.site] === undefined) lastUsed[d.site] = i; });
+
+    var sorted = INJECTION_SITES.filter(function(s) { return s !== 'Other'; }).sort(function(a,b) {
+        return (lastUsed[b] !== undefined ? lastUsed[b] : 999) - (lastUsed[a] !== undefined ? lastUsed[a] : 999);
+    });
+    var next = sorted[sorted.length - 1];
+    var html = '';
+
+    sorted.forEach(function(site) {
+        var last     = lastUsed[site];
+        var isNext   = (site === next);
+        var isRecent = (last !== undefined && last < 3);
+        var cls      = 'rotation-site' + (isNext ? ' next' : isRecent ? ' recent' : '');
+        var badge    = '';
+        if (isNext)       badge = '<span class="rotation-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">← Next</span>';
+        else if (last===0) badge = '<span class="rotation-badge" style="background:rgba(239,68,68,0.15);color:var(--danger);">Last used</span>';
+        else if (last!==undefined) badge = '<span class="rotation-badge" style="background:rgba(245,158,11,0.15);color:var(--warning);">' + last + ' ago</span>';
+        else badge = '<span class="rotation-badge" style="background:rgba(148,163,184,0.15);color:var(--text-secondary);">Unused</span>';
+        html += '<div class="' + cls + '"><div class="rotation-site-name">' + escapeHtml(site) + '</div>' + badge + '</div>';
+    });
+
+    grid.innerHTML = html || '<p style="color:var(--text-secondary);">Log injections with site info to see rotation guidance.</p>';
+}
+
+// ── HISTORY ───────────────────────────────────────────────────
+function renderHistory(filter) {
+    filter = filter !== undefined ? filter : (document.getElementById('history-search').value || '');
+    var tbody = document.getElementById('history-table');
+    var doses = (appData.doses || []).slice().sort(function(a,b) { return b.date.localeCompare(a.date); });
+    if (filter) doses = doses.filter(function(d) { return d.peptideName.toLowerCase().indexOf(filter.toLowerCase()) > -1; });
+    if (!doses.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = doses.map(function(d) {
+        return '<tr><td>' + fmtDate(d.date) + '</td>' +
+               '<td>' + (d.time || '-') + '</td>' +
+               '<td>' + escapeHtml(d.peptideName) + '</td>' +
+               '<td>' + d.amount + ' ' + (d.unit || 'mcg') + '</td>' +
+               '<td>' + escapeHtml(d.site || '-') + '</td>' +
+               '<td style="font-size:0.8rem;color:var(--text-secondary);max-width:160px;">' + escapeHtml(d.notes || '') + '</td>' +
+               '<td><button class="btn-danger btn-small" onclick="deleteDose(\'' + d.id + '\')">🗑️</button></td></tr>';
+    }).join('');
+}
+
+document.getElementById('history-search').addEventListener('input', function() { renderHistory(this.value); });
+
+async function deleteDose(id) {
+    if (!confirm('Delete this dose?')) return;
+    appData.doses = appData.doses.filter(function(d) { return d.id !== id; });
+    try { await dbDelete('doses', id); } catch(err) { alert('Delete failed: ' + err.message); }
+    renderHistory();
+}
+
+function exportCSV() {
+    if (!appData.doses || !appData.doses.length) { alert('No doses to export.'); return; }
+    var rows = [['Date','Time','Peptide','Dose','Unit','Site','Notes']];
+    appData.doses.slice().sort(function(a,b) { return a.date.localeCompare(b.date); }).forEach(function(d) {
+        rows.push([d.date, d.time||'', d.peptideName, d.amount, d.unit||'mcg', d.site||'', (d.notes||'').replace(/,/g,' ')]);
+    });
+    dlCSV(rows, 'peptide-log');
+}
+
+function dlCSV(rows, name) {
+    var blob = new Blob([rows.map(function(r) { return r.join(','); }).join('\n')], { type:'text/csv' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = name + '-' + new Date().toISOString().split('T')[0] + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────
+var calDate = new Date();
+
+function renderCalendar() {
+    var grid   = document.getElementById('calendar-grid');
+    var header = document.getElementById('calendar-month-year');
+    var year   = calDate.getFullYear(), month = calDate.getMonth();
+    header.textContent = new Date(year, month).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+    var fd  = new Date(year, month, 1).getDay();
+    var dim = new Date(year, month + 1, 0).getDate();
+    var pl  = new Date(year, month, 0).getDate();
+    var today = new Date(); today.setHours(0,0,0,0);
+
+    var html = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+        .map(function(d) { return '<div class="cal-day-header">' + d + '</div>'; }).join('');
+
+    for (var i = fd - 1; i >= 0; i--) html += '<div class="cal-day other-month"><div class="cal-day-num">' + (pl - i) + '</div></div>';
+
+    for (var day = 1; day <= dim; day++) {
+        var ds  = year + '-' + String(month + 1).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+        var isT = new Date(year, month, day).getTime() === today.getTime();
+        var dd  = (appData.doses || []).filter(function(d) { return d.date === ds; });
+        var doseHtml = dd.map(function(d) {
+            var p  = appData.peptides.find(function(x) { return x.id === d.peptideId; });
+            var bg = p ? getPeptideColor(p) : 'var(--accent)';
+            return '<div class="cal-dose" style="background:' + bg + ';" title="' + escapeHtml(d.peptideName) + ': ' + d.amount + (d.unit||'mcg') + '">' + escapeHtml(d.peptideName) + '</div>';
+        }).join('');
+        html += '<div class="cal-day' + (isT ? ' today' : '') + '"><div class="cal-day-num">' + day + '</div>' + doseHtml + '</div>';
+    }
+
+    var rem = 42 - (fd + dim);
+    for (var j = 1; j <= rem; j++) html += '<div class="cal-day other-month"><div class="cal-day-num">' + j + '</div></div>';
+    grid.innerHTML = html;
+}
+
+document.getElementById('prev-month').addEventListener('click', function() { calDate.setMonth(calDate.getMonth() - 1); renderCalendar(); });
+document.getElementById('next-month').addEventListener('click', function() { calDate.setMonth(calDate.getMonth() + 1); renderCalendar(); });
+document.getElementById('today-btn').addEventListener('click', function() { calDate = new Date(); renderCalendar(); });
+
+// ── PROTOCOL TEMPLATES ────────────────────────────────────────
+function openCreateProtocolModal() {
+    document.getElementById('proto-name').value = '';
+    var list = document.getElementById('proto-peptide-list');
+    if (!appData.peptides.length) {
+        list.innerHTML = '<p style="color:var(--text-secondary);">No peptides in supply yet.</p>';
+        document.getElementById('protocol-modal').classList.add('active');
+        return;
+    }
+    list.innerHTML = appData.peptides.map(function(p) {
+        return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">' +
+               '<input type="checkbox" value="' + p.id + '" style="width:16px;height:16px;accent-color:var(--accent);">' +
+               '<span class="color-dot" style="background:' + (p.color || 'var(--accent)') + '"></span>' +
+               '<span>' + escapeHtml(p.name) + ' — ' + p.mgPerVial + p.unit + '/vial, ' + p.dailyDose + ' ' + doseUnit(p) + ' × ' + p.dosesPerWeek + '/wk</span></label>';
+    }).join('');
+    document.getElementById('protocol-modal').classList.add('active');
+}
+
+async function saveProtocolTemplate() {
+    var name = document.getElementById('proto-name').value.trim();
+    if (!name) { alert('Enter a template name.'); return; }
+    var checked = Array.from(document.getElementById('proto-peptide-list').querySelectorAll('input:checked')).map(function(c) { return c.value; });
+    if (!checked.length) { alert('Select at least one peptide.'); return; }
+
+    var peptides = checked.map(function(id) {
+        var p = appData.peptides.find(function(x) { return x.id === id; });
+        return { name:p.name, mgPerVial:p.mgPerVial, unit:p.unit, vialsPerKit:p.vialsPerKit,
+                 dailyDose:p.dailyDose, dosesPerWeek:p.dosesPerWeek, cycleDuration:p.cycleDuration,
+                 syringeType:p.syringeType, color:p.color };
+    });
+
+    var proto = { id: genId(), name: name, peptides: peptides, createdAt: new Date().toISOString() };
+    try {
+        await dbPut('protocols', proto);
+        appData.protocols.push(proto);
+    } catch(err) { alert('Save failed: ' + err.message); return; }
+    renderProtocolTemplatesList();
+    closeModal('protocol-modal');
+}
+
+function renderProtocolTemplatesList() {
+    var container = document.getElementById('protocol-templates-list');
+    if (!appData.protocols.length) {
+        container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.88rem;">No protocol templates yet.</p>';
+        return;
+    }
+    container.innerHTML = appData.protocols.map(function(proto) {
+        return '<div class="template-card">' +
+               '<div><strong>' + escapeHtml(proto.name) + '</strong>' +
+               '<div style="font-size:0.82rem;color:var(--text-secondary);margin-top:3px;">' +
+               proto.peptides.map(function(p) { return escapeHtml(p.name); }).join(', ') + '</div></div>' +
+               '<div style="display:flex;gap:8px;">' +
+               '<button class="btn-primary btn-small" onclick="applyProtocolTemplate(\'' + proto.id + '\')">Apply to Supply</button>' +
+               '<button class="btn-danger btn-small" onclick="deleteProtocol(\'' + proto.id + '\')">🗑️</button>' +
+               '</div></div>';
+    }).join('');
+}
+
+async function applyProtocolTemplate(protoId) {
+    var proto = appData.protocols.find(function(x) { return x.id === protoId; });
+    if (!proto || !confirm('Add all peptides from "' + proto.name + '" to your supply?')) return;
+    for (var i = 0; i < proto.peptides.length; i++) {
+        var pp = proto.peptides[i];
+        var p  = {
+            id: genId(), name: pp.name, mgPerVial: pp.mgPerVial, unit: pp.unit || 'mg',
+            vialsPerKit: pp.vialsPerKit, vialsOnHand: pp.vialsPerKit,
+            dailyDose: pp.dailyDose || 0, dosesPerWeek: pp.dosesPerWeek || 7,
+            cycleDuration: pp.cycleDuration || 0, syringeType: pp.syringeType || 'U100',
+            reorderThreshold: 5, color: pp.color || PEPTIDE_COLORS[0],
+            reconstituted: null, createdAt: new Date().toISOString()
+        };
+        try { await dbPut('peptides', p); appData.peptides.push(p); } catch(err) { alert('Save failed: ' + err.message); }
+    }
+    renderSupply();
+    updateDoseDropdown();
+    alert('Protocol applied! ' + proto.peptides.length + ' peptides added.');
+}
+
+async function deleteProtocol(id) {
+    if (!confirm('Delete this protocol template?')) return;
+    appData.protocols = appData.protocols.filter(function(x) { return x.id !== id; });
+    try { await dbDelete('protocols', id); } catch(err) { alert('Delete failed: ' + err.message); }
+    renderProtocolTemplatesList();
+}
+
+// ── MODALS ────────────────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(function(m) {
+    m.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('active'); });
+});
+
+// ── BACKUP & RESTORE ──────────────────────────────────────────
+async function backupData() {
+    var backup = {
+        peptides: appData.peptides, doses: appData.doses, cycles: appData.cycles,
+        protocols: appData.protocols, settings: appData.settings,
+        exportedAt: new Date().toISOString(), version: 2
+    };
+    var blob = new Blob([JSON.stringify(backup, null, 2)], { type:'application/json' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = 'peptide-tracker-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+async function restoreData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            var backup = JSON.parse(e.target.result);
+            if (!backup.peptides && !backup.doses) { alert('Invalid backup file.'); return; }
+            if (!confirm('Restore this backup? All current data will be replaced.')) return;
+
+            for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
+
+            appData.peptides  = backup.peptides  || [];
+            appData.doses     = backup.doses     || [];
+            appData.cycles    = backup.cycles    || [];
+            appData.protocols = backup.protocols || [];
+            if (backup.settings) appData.settings = backup.settings;
+
+            for (var i = 0; i < appData.peptides.length;  i++) await dbPut('peptides',  appData.peptides[i]);
+            for (var i = 0; i < appData.doses.length;     i++) await dbPut('doses',     appData.doses[i]);
+            for (var i = 0; i < appData.cycles.length;    i++) await dbPut('cycles',    appData.cycles[i]);
+            for (var i = 0; i < appData.protocols.length; i++) await dbPut('protocols', appData.protocols[i]);
+            if (backup.settings) await dbPut('settings', Object.assign({ id:'app_settings' }, backup.settings));
+
+            applyTheme();
+            renderAll();
+            renderProtocolTemplatesList();
+            checkLowStockNotification();
+            alert('Data restored successfully!');
+        } catch(err) { alert('Restore failed: ' + err.message); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+async function clearAllData() {
+    if (!confirm('Delete ALL data? This cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure?')) return;
+    for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
+    appData = { peptides:[], doses:[], cycles:[], protocols:[], settings:{ theme:'dark' } };
+    renderAll();
+    checkLowStockNotification();
+    alert('All data cleared.');
+}
+
+// ── RENDER ALL ────────────────────────────────────────────────
+function renderAll() {
+    renderSupply();
+    updateDoseDropdown();
+    renderHistory();
+    renderCalendar();
+    renderSiteRotation();
+    renderProtocolTemplatesList();
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+async function init() {
+    try {
+        await loadAllData();
+        initPeptideDropdown();
+        renderAll();
+        applyTheme();
+        checkLowStockNotification();
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(function() {});
+        }
+        console.log('[PeptideTracker] Ready — ' + appData.peptides.length + ' peptides, ' + appData.doses.length + ' doses');
+    } catch(e) {
+        console.error('[Init] Error:', e);
+        document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#ef4444;">' +
+            '<h2>Failed to initialize</h2><p>' + e.message + '</p>' +
+            '<p>Try Chrome, Firefox, or Safari on iOS 15.4+.</p></div>';
+    }
+}
+
+init();
