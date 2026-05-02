@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peptide Tracker</title>
+    <style>
+        :root[data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #475569;
+            --purple: #8b5cf6;
+            --shadow: rgba(0,0,0,0.4);
+        }
+        :root[data-theme="light"] {
+            --bg-primary: #f1f5f9;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e2e8f0;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --border: #cbd5e1;
+            --purple: #7c3aed;
+            --shadow: rgba(0,0,0,0.1);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg-primary); color:var(--text-primary); min-height:100vh; line-height:1.6; transition:background 0.3s,color 0.3s; }
+        .container { max-width:1400px; margin:0 auto; padding:20px; }
+        header { text-align:center; padding:30px 0; border-bottom:1px solid var(--border); margin-bottom:30px; position:relative; }
+        header h1 { font-size:2.5rem; margin-bottom:6px; background:linear-gradient(135deg,var(--accent),var(--purple)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        header p { color:var(--text-secondary); }
+        .header-controls { position:absolute; top:20px; right:0; display:flex; gap:10px; align-items:center; }
+        .theme-toggle { background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-primary); padding:6px 12px; border-radius:20px; cursor:pointer; font-size:0.85rem; transition:all 0.2s; }
+        .theme-toggle:hover { border-color:var(--accent); }
+        .notif-banner { background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:8px 14px; margin-bottom:16px; font-size:0.88rem; color:var(--danger); display:none; }
+        .notif-banner.show { display:block; }
+        .tabs { display:flex; gap:6px; margin-bottom:30px; border-bottom:2px solid var(--border); padding-bottom:10px; flex-wrap:wrap; }
+        .tab-btn { padding:10px 18px; background:transparent; border:none; color:var(--text-secondary); font-size:0.92rem; cursor:pointer; border-radius:8px 8px 0 0; transition:all 0.2s; position:relative; }
+        .tab-btn:hover { color:var(--text-primary); background:var(--bg-secondary); }
+        .tab-btn.active { color:var(--accent); background:var(--bg-secondary); border-bottom:2px solid var(--accent); }
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+        .card { background:var(--bg-secondary); border-radius:12px; padding:24px; margin-bottom:20px; border:1px solid var(--border); }
+        .card h2 { margin-bottom:20px; font-size:1.4rem; }
+        .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
+        .form-group { display:flex; flex-direction:column; gap:5px; }
+        .form-group.full-width { grid-column:1/-1; }
+        label { color:var(--text-secondary); font-size:0.85rem; font-weight:500; }
+        input,select,textarea { padding:11px; border:1px solid var(--border); border-radius:8px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.95rem; transition:border-color 0.2s; }
+        input:focus,select:focus,textarea:focus { outline:none; border-color:var(--accent); }
+        input:read-only,input:disabled { background:var(--bg-primary); color:var(--text-secondary); cursor:not-allowed; }
+        textarea { resize:vertical; min-height:70px; }
+        button { padding:11px 22px; border:none; border-radius:8px; font-size:0.95rem; cursor:pointer; transition:all 0.2s; font-weight:500; }
+        .btn-primary { background:var(--accent); color:white; }
+        .btn-primary:hover { background:var(--accent-hover); }
+        .btn-danger { background:var(--danger); color:white; }
+        .btn-danger:hover { background:#b91c1c; }
+        .btn-success { background:var(--success); color:white; }
+        .btn-success:hover { background:#15803d; }
+        .btn-warning { background:var(--warning); color:white; }
+        .btn-warning:hover { background:#b45309; }
+        .btn-small { padding:5px 11px; font-size:0.82rem; }
+        .btn-ghost { background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border); }
+        .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+        .supply-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(370px,1fr)); gap:18px; margin-top:20px; }
+        .peptide-card { background:var(--bg-tertiary); border-radius:12px; padding:18px; border:2px solid var(--border); transition:border-color 0.2s; }
+        .peptide-card.has-active-cycle { box-shadow:0 0 0 1px rgba(34,197,94,0.3); }
+        .peptide-card h3 { margin-bottom:10px; font-size:1.15rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .color-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+        .peptide-info { display:grid; gap:6px; font-size:0.88rem; }
+        .peptide-info-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); gap:10px; }
+        .peptide-info-row:last-child { border-bottom:none; }
+        .info-label { color:var(--text-secondary); flex-shrink:0; }
+        .info-value { font-weight:500; text-align:right; }
+        .peptide-description { font-size:0.82rem; color:var(--text-secondary); font-style:italic; line-height:1.5; padding:10px; background:var(--bg-primary); border-radius:8px; margin-top:10px; }
+        .status-badge { display:inline-block; padding:3px 9px; border-radius:20px; font-size:0.72rem; font-weight:600; }
+        .status-good { background:rgba(34,197,94,0.15); color:var(--success); }
+        .status-low { background:rgba(245,158,11,0.15); color:var(--warning); }
+        .status-critical { background:rgba(239,68,68,0.15); color:var(--danger); }
+        .status-cycle { background:rgba(139,92,246,0.15); color:var(--purple); }
+        .peptide-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+        .recon-section { margin-top:14px; padding-top:14px; border-top:1px dashed var(--border); }
+        .dose-calc { background:var(--bg-primary); padding:10px 12px; border-radius:8px; margin-top:8px; }
+        .dose-calc p { margin:3px 0; font-size:0.84rem; }
+        .highlight { color:var(--accent); font-weight:600; }
+        .highlight-green { color:var(--success); font-weight:600; }
+        .highlight-purple { color:var(--purple); font-weight:600; }
+        .syringe-display { display:flex; gap:10px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+        .syringe-badge { padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:600; background:rgba(139,92,246,0.15); color:var(--purple); }
+        .summary-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:22px; }
+        .summary-card { background:var(--bg-tertiary); border-radius:12px; padding:18px; text-align:center; }
+        .summary-card-value { font-size:1.9rem; font-weight:700; color:var(--accent); }
+        .summary-card-label { color:var(--text-secondary); font-size:0.82rem; margin-top:3px; }
+        .log-table { width:100%; border-collapse:collapse; }
+        .log-table th,.log-table td { padding:11px 12px; text-align:left; border-bottom:1px solid var(--border); font-size:0.9rem; }
+        .log-table th { background:var(--bg-tertiary); color:var(--text-secondary); font-weight:600; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; }
+        .log-table tr:hover { background:rgba(255,255,255,0.02); }
+        .calendar-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+        .calendar-nav { display:flex; gap:8px; align-items:center; }
+        .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+        .cal-day-header { text-align:center; padding:10px; color:var(--text-secondary); font-weight:600; font-size:0.82rem; }
+        .cal-day { min-height:90px; background:var(--bg-secondary); border-radius:6px; padding:6px; border:1px solid var(--border); }
+        .cal-day.other-month { opacity:0.35; }
+        .cal-day.today { border-color:var(--accent); box-shadow:0 0 0 1px rgba(59,130,246,0.3); }
+        .cal-day-num { font-weight:600; margin-bottom:4px; color:var(--text-secondary); font-size:0.85rem; }
+        .cal-day.today .cal-day-num { color:var(--accent); }
+        .cal-dose { font-size:0.65rem; padding:2px 5px; border-radius:3px; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:white; }
+        .cycle-controls { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+        .gantt-container { overflow-x:auto; padding-bottom:10px; }
+        .gantt-wrapper { min-width:800px; }
+        .gantt-header { display:flex; margin-bottom:8px; }
+        .gantt-label-col { width:200px; flex-shrink:0; font-size:0.8rem; color:var(--text-secondary); font-weight:600; text-transform:uppercase; }
+        .gantt-months { flex:1; position:relative; height:22px; }
+        .gantt-month-label { font-size:0.75rem; color:var(--text-secondary); position:absolute; padding-left:4px; }
+        .gantt-row { display:flex; align-items:center; margin-bottom:10px; min-height:44px; }
+        .gantt-row-label { width:200px; flex-shrink:0; padding-right:12px; }
+        .gantt-row-label strong { display:block; font-size:0.9rem; color:var(--text-primary); }
+        .gantt-row-label small { font-size:0.75rem; color:var(--text-secondary); }
+        .gantt-track { flex:1; height:36px; background:var(--bg-primary); border-radius:6px; position:relative; overflow:hidden; border:1px solid var(--border); }
+        .gantt-bar { position:absolute; height:100%; border-radius:4px; display:flex; align-items:center; padding:0 8px; font-size:0.72rem; font-weight:600; color:white; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; transition:opacity 0.15s; }
+        .gantt-bar:hover { opacity:0.85; }
+        .gantt-bar.completed { opacity:0.7; }
+        .gantt-today-line { position:absolute; top:0; bottom:0; width:2px; background:var(--danger); opacity:0.7; z-index:5; }
+        .gantt-grid-line { position:absolute; top:0; bottom:0; width:1px; background:var(--border); opacity:0.4; }
+        .cycle-detail-card { background:var(--bg-tertiary); border-radius:10px; padding:16px; margin-bottom:12px; border:1px solid var(--border); }
+        .cycle-detail-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+        .cycle-progress-bar { height:8px; background:var(--bg-primary); border-radius:4px; overflow:hidden; margin-top:8px; }
+        .cycle-progress-fill { height:100%; border-radius:4px; transition:width 0.3s; }
+        .cycle-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-top:12px; }
+        .cycle-stat { text-align:center; padding:10px; background:var(--bg-primary); border-radius:8px; }
+        .cycle-stat-value { font-size:1.4rem; font-weight:700; color:var(--accent); }
+        .cycle-stat-label { font-size:0.75rem; color:var(--text-secondary); }
+        .supply-projection { margin-top:12px; padding:10px 12px; background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2); border-radius:8px; font-size:0.84rem; }
+        .empty-state { text-align:center; padding:50px 20px; color:var(--text-secondary); }
+        .preview-box { background:var(--bg-primary); border:1px dashed var(--border); border-radius:8px; padding:14px; margin-top:14px; }
+        .preview-box h4 { color:var(--accent); margin-bottom:10px; }
+        .preview-row { display:flex; justify-content:space-between; padding:3px 0; font-size:0.88rem; }
+        .preview-description { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); font-style:italic; color:var(--text-secondary); font-size:0.82rem; }
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:1000; justify-content:center; align-items:center; padding:20px; }
+        .modal-overlay.active { display:flex; }
+        .modal { background:var(--bg-secondary); border-radius:12px; padding:24px; max-width:520px; width:100%; max-height:90vh; overflow-y:auto; border:1px solid var(--border); }
+        .modal h2 { margin-bottom:18px; }
+        .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+        .export-bar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+        /* Site rotation */
+        .rotation-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:12px; }
+        .rotation-site { background:var(--bg-primary); border-radius:8px; padding:12px; border:2px solid var(--border); text-align:center; }
+        .rotation-site.next { border-color:var(--success); background:rgba(34,197,94,0.06); }
+        .rotation-site.recent { border-color:var(--warning); }
+        .rotation-site-name { font-weight:600; font-size:0.9rem; margin-bottom:4px; }
+        .rotation-site-last { font-size:0.78rem; color:var(--text-secondary); }
+        .rotation-badge { font-size:0.72rem; padding:2px 8px; border-radius:10px; margin-top:4px; display:inline-block; }
+        /* Color picker */
+        .color-picker-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+        .color-swatch { width:26px; height:26px; border-radius:50%; cursor:pointer; border:3px solid transparent; transition:transform 0.15s; }
+        .color-swatch:hover { transform:scale(1.15); }
+        .color-swatch.selected { border-color:var(--text-primary); }
+        /* Protocol templates */
+        .template-card { background:var(--bg-tertiary); border-radius:10px; padding:14px; margin-bottom:10px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+        /* Reorder */
+        .reorder-badge { display:inline-flex; align-items:center; justify-content:center; background:var(--danger); color:white; border-radius:10px; font-size:0.68rem; font-weight:700; min-width:17px; height:17px; padding:0 4px; margin-left:4px; vertical-align:middle; }
+        .low-stock-row { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--bg-primary); border-radius:8px; margin-bottom:8px; border-left:3px solid var(--warning); flex-wrap:wrap; gap:8px; }
+        .low-stock-row.out { border-left-color:var(--danger); }
+        .low-stock-meta { font-size:0.8rem; color:var(--text-secondary); margin-top:2px; }
+        .order-card { background:var(--bg-tertiary); border-radius:10px; padding:16px; margin-bottom:12px; border:1px solid var(--border); }
+        .order-card.active-order { border-color:var(--accent); box-shadow:0 0 0 1px rgba(59,130,246,0.2); }
+        .order-card-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+        .order-status-saved { background:rgba(139,92,246,0.15); color:var(--purple); }
+        .order-status-placed { background:rgba(59,130,246,0.15); color:var(--accent); }
+        .order-status-received { background:rgba(34,197,94,0.15); color:var(--success); }
+        .cart-totals-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:16px; }
+        .cart-total-box { background:var(--bg-primary); border-radius:8px; padding:14px; text-align:center; }
+        .cart-total-value { font-size:1.6rem; font-weight:700; color:var(--accent); }
+        .cart-total-label { font-size:0.78rem; color:var(--text-secondary); margin-top:2px; }
+        .days-ok { color:var(--success); font-weight:600; }
+        .days-warn { color:var(--warning); font-weight:600; }
+        .days-crit { color:var(--danger); font-weight:600; }
+        /* Settings */
+        .settings-section { margin-bottom:28px; padding-bottom:28px; border-bottom:1px solid var(--border); }
+        .settings-section:last-child { border-bottom:none; }
+        .settings-section h3 { font-size:1.1rem; margin-bottom:16px; }
+        .tip-box { background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:8px; padding:10px 14px; font-size:0.85rem; color:var(--success); margin-top:10px; }
+        .warn-box { background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:10px 14px; font-size:0.85rem; color:var(--warning); }
+        @media(max-width:768px) {
+            .supply-grid { grid-template-columns:1fr; }
+            .cal-day { min-height:55px; padding:3px; }
+            .cal-dose { font-size:0.58rem; }
+            .gantt-label-col,.gantt-row-label { width:130px; }
+            .header-controls { position:static; justify-content:center; margin-top:10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="header-controls">
+            <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">☀️ Light</button>
+        </div>
+        <h1>💉 Peptide Tracker</h1>
+        <p>Supply management, dosing schedule, and cycle tracking</p>
+    </header>
+
+    <div class="notif-banner" id="notif-banner"></div>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="supply">📦 Supply</button>
+        <button class="tab-btn" data-tab="tracking">📋 Log Dose</button>
+        <button class="tab-btn" data-tab="history">📜 History</button>
+        <button class="tab-btn" data-tab="calendar">📅 Calendar</button>
+        <button class="tab-btn" data-tab="cycles">🔄 Cycles</button>
+        <button class="tab-btn" data-tab="reorder" id="reorder-tab-btn">🛒 Reorder</button>
+        <button class="tab-btn" data-tab="catalog">📚 Catalog</button>
+        <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+    </div>
+
+    <!-- SUPPLY TAB -->
+    <div id="supply" class="tab-content active">
+        <div class="card">
+            <h2>Add Peptide to Supply</h2>
+            <form id="peptide-form">
+                <div class="form-grid">
+                    <div class="form-group"><label>Select from Catalog *</label><select id="catalog-select" required><option value="">Choose a peptide...</option></select></div>
+                    <div class="form-group"><label>Size / Variant *</label><select id="variant-select" required disabled><option value="">Select peptide first...</option></select></div>
+                    <div class="form-group"><label>mg / IU per Vial</label><input type="text" id="display-mg" readonly></div>
+                    <div class="form-group"><label>Vials per Kit</label><input type="text" id="display-vials" readonly></div>
+                    <div class="form-group"><label>Price per Kit ($)</label><input type="text" id="display-price" readonly></div>
+                    <div class="form-group"><label>Kits on Hand *</label><input type="number" id="kits-on-hand" required min="0" value="1"></div>
+                    <div class="form-group"><label id="dose-label">Your Dose (mcg)</label><input type="number" id="daily-dose" step="0.01" min="0" placeholder="e.g. 250"></div>
+                    <div class="form-group"><label>Doses per Week</label><input type="number" id="doses-per-week" min="1" max="14" value="7"></div>
+                    <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="cycle-duration" min="1" max="52" placeholder="e.g. 12"></div>
+                    <div class="form-group"><label>Syringe Type</label>
+                        <select id="syringe-type">
+                            <option value="U100">U-100 (1 unit = 0.01 mL)</option>
+                            <option value="U50">U-50 (1 unit = 0.02 mL)</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Reorder at (vials)</label><input type="number" id="reorder-threshold" min="0" value="5"></div>
+                    <div class="form-group"><label>Card Color</label>
+                        <div class="color-picker-row" id="supply-color-picker"></div>
+                    </div>
+                </div>
+                <div class="preview-box" id="add-preview" style="display:none;">
+                    <h4 id="preview-name">Preview</h4>
+                    <div class="preview-row"><span>Total Vials:</span><span id="preview-total-vials">-</span></div>
+                    <div class="preview-row"><span id="preview-total-label">Total mg:</span><span id="preview-total-mg">-</span></div>
+                    <div class="preview-row"><span>Est. Supply:</span><span id="preview-supply">-</span></div>
+                    <div class="preview-row"><span>Cycle Dose Total:</span><span id="preview-cycle-total">-</span></div>
+                    <div class="preview-description" id="preview-description"></div>
+                </div>
+                <div style="margin-top:18px;"><button type="submit" class="btn-primary">+ Add to Supply</button></div>
+            </form>
+        </div>
+        <div class="summary-cards" id="supply-summary"></div>
+        <h2 style="margin-bottom:14px;">Your Peptide Supply</h2>
+        <div class="supply-grid" id="supply-grid"><div class="empty-state" style="grid-column:1/-1;"><p>No peptides added yet.</p></div></div>
+    </div>
+
+    <!-- LOG DOSE TAB -->
+    <div id="tracking" class="tab-content">
+        <div class="card">
+            <h2>Log Injection</h2>
+            <form id="dose-form">
+                <div class="form-grid">
+                    <div class="form-group"><label>Date *</label><input type="date" id="dose-date" required></div>
+                    <div class="form-group"><label>Time</label><input type="time" id="dose-time"></div>
+                    <div class="form-group"><label>Peptide *</label><select id="dose-peptide" required><option value="">Select from your supply...</option></select></div>
+                    <div class="form-group"><label id="log-dose-label">Dose (mcg) *</label><input type="number" id="dose-amount" required step="0.01" min="0" placeholder="e.g. 250"></div>
+                    <div class="form-group"><label>Injection Site</label>
+                        <select id="injection-site">
+                            <option value="">Select site...</option>
+                            <option>Abdomen - Left</option><option>Abdomen - Right</option>
+                            <option>Thigh - Left</option><option>Thigh - Right</option>
+                            <option>Deltoid - Left</option><option>Deltoid - Right</option>
+                            <option>Glute - Left</option><option>Glute - Right</option>
+                            <option>Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width"><label>Notes</label><textarea id="dose-notes" placeholder="Observations, side effects..."></textarea></div>
+                </div>
+                <div style="margin-top:18px;"><button type="submit" class="btn-success">✓ Log Dose</button></div>
+            </form>
+        </div>
+        <div class="card" id="quick-reference" style="display:none;">
+            <h2>Dosing Reference</h2>
+            <div id="quick-reference-content"></div>
+        </div>
+        <div class="card" id="site-rotation-card">
+            <h2>Injection Site Rotation</h2>
+            <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:4px;">Based on your last 14 logged injections. Rotate sites to reduce tissue stress.</p>
+            <div class="rotation-grid" id="rotation-grid"></div>
+        </div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="history" class="tab-content">
+        <div class="card">
+            <h2>Injection History</h2>
+            <div class="export-bar">
+                <button class="btn-ghost btn-small" onclick="exportCSV()">⬇ Export CSV</button>
+                <input type="text" id="history-search" placeholder="Filter by peptide..." style="padding:6px 10px;font-size:0.85rem;width:200px;">
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead><tr><th>Date</th><th>Time</th><th>Peptide</th><th>Dose</th><th>Site</th><th>Notes</th><th>Actions</th></tr></thead>
+                    <tbody id="history-table"><tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- CALENDAR TAB -->
+    <div id="calendar" class="tab-content">
+        <div class="card">
+            <div class="calendar-header">
+                <h2 id="calendar-month-year"></h2>
+                <div class="calendar-nav">
+                    <button class="btn-primary btn-small" id="prev-month">← Prev</button>
+                    <button class="btn-ghost btn-small" id="today-btn">Today</button>
+                    <button class="btn-primary btn-small" id="next-month">Next →</button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+    </div>
+
+    <!-- CYCLES TAB -->
+    <div id="cycles" class="tab-content">
+        <div class="card">
+            <h2>Cycle Timeline</h2>
+            <div class="cycle-controls">
+                <button class="btn-ghost btn-small" id="gantt-scroll-left">◀ Earlier</button>
+                <span id="gantt-range-label" style="font-size:0.85rem;color:var(--text-secondary);"></span>
+                <button class="btn-ghost btn-small" id="gantt-scroll-right">Later ▶</button>
+                <span style="flex:1;"></span>
+                <span style="font-size:0.78rem;color:var(--text-secondary);">
+                    <span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;margin-right:4px;"></span>Active&nbsp;
+                    <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;margin:0 4px 0 10px;"></span>Completed&nbsp;
+                    <span style="display:inline-block;width:2px;height:10px;background:var(--danger);margin:0 4px 0 10px;"></span>Today
+                </span>
+            </div>
+            <div class="gantt-container"><div class="gantt-wrapper" id="gantt-wrapper"></div></div>
+        </div>
+        <div class="card">
+            <h2>Cycle Details</h2>
+            <div id="cycle-details-list"><div class="empty-state"><p>No cycles started yet.</p></div></div>
+        </div>
+    </div>
+
+    <!-- REORDER TAB -->
+    <div id="reorder" class="tab-content">
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                <h2 style="margin:0;">⚠️ Low Stock Alerts</h2>
+                <button class="btn-primary btn-small" onclick="autoSuggestToNewOrder()">⚡ Auto-Suggest to New Order</button>
+            </div>
+            <div id="low-stock-panel"><div class="tip-box">✓ All peptides are above their reorder thresholds.</div></div>
+        </div>
+
+        <!-- ORDER WORKSPACE -->
+        <div class="card" id="active-order-card" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+                <div style="flex:1;min-width:220px;">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                        <input type="text" id="order-name-input" placeholder="Order name..." style="font-size:1.1rem;font-weight:600;background:transparent;border:none;border-bottom:2px solid var(--border);border-radius:0;padding:4px 8px;color:var(--text-primary);width:240px;">
+                        <span id="order-status-badge" class="status-badge"></span>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <div class="form-group" style="min-width:160px;"><label>Supplier</label><input type="text" id="order-supplier" placeholder="e.g. PeptideSciences" style="padding:7px 10px;font-size:0.88rem;"></div>
+                        <div class="form-group" style="min-width:220px;"><label>Notes / Coupon</label><input type="text" id="order-notes" placeholder="e.g. SAVE15" style="padding:7px 10px;font-size:0.88rem;"></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-start;padding-top:4px;">
+                    <button class="btn-ghost btn-small" onclick="saveActiveOrder()">💾 Save</button>
+                    <button class="btn-ghost btn-small" onclick="saveAsTemplate()">📋 Save as Template</button>
+                    <button class="btn-ghost btn-small" onclick="exportOrderCSV()">⬇ CSV</button>
+                    <button id="btn-mark-placed" class="btn-primary btn-small" onclick="markOrderPlaced()">📦 Mark Placed</button>
+                    <button id="btn-mark-received" class="btn-success btn-small" onclick="markOrderReceived()" style="display:none;">✓ Mark Received</button>
+                    <button class="btn-ghost btn-small" onclick="closeActiveOrder()">✕ Close</button>
+                    <button class="btn-danger btn-small" onclick="deleteActiveOrder()">🗑️</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead><tr><th>Peptide</th><th>Size</th><th>Supplier</th><th>Qty (kits)</th><th>Unit Price</th><th>Line Total</th><th>Cost/Week</th><th>Cost/Cycle</th><th>Actions</th></tr></thead>
+                    <tbody id="cart-tbody"><tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-secondary);">Cart is empty — add items below</td></tr></tbody>
+                </table>
+            </div>
+            <div id="cart-totals" style="display:none;">
+                <div class="cart-totals-grid">
+                    <div class="cart-total-box"><div class="cart-total-value" id="cart-line-count">0</div><div class="cart-total-label">Line Items</div></div>
+                    <div class="cart-total-box"><div class="cart-total-value" id="cart-total-vials">0</div><div class="cart-total-label">Total Vials</div></div>
+                    <div class="cart-total-box"><div class="cart-total-value" id="cart-order-total">$0</div><div class="cart-total-label">Order Total</div></div>
+                    <div class="cart-total-box"><div class="cart-total-value" id="cart-cost-wk">$0</div><div class="cart-total-label">Est. $/Week</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NO ORDER OPEN -->
+        <div class="card" id="no-order-prompt" style="text-align:center;padding:40px;">
+            <p style="color:var(--text-secondary);margin-bottom:16px;">No order open. Create a new order, start from a template, or open one from history.</p>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button class="btn-primary" onclick="newOrder()">+ New Order</button>
+                <button class="btn-ghost" onclick="showTemplateSelector()">📋 From Template</button>
+            </div>
+        </div>
+
+        <!-- ADD FROM CATALOG -->
+        <div class="card" id="add-catalog-card" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                <h2 style="margin:0;">Add from Catalog</h2>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <input type="text" id="reorder-search" placeholder="Search..." style="padding:7px 10px;font-size:0.88rem;width:180px;" oninput="renderReorderCatalog()">
+                    <select id="reorder-filter" onchange="renderReorderCatalog()" style="padding:7px 10px;font-size:0.88rem;">
+                        <option value="all">All Products</option>
+                        <option value="supply">In My Supply</option>
+                        <option value="new">New Products Only</option>
+                        <option value="low">Low Stock Only</option>
+                    </select>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead><tr><th>Peptide</th><th>Size</th><th>Price/Kit</th><th>Status</th><th>Days Left</th><th>Qty</th><th>Action</th></tr></thead>
+                    <tbody id="reorder-catalog-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TEMPLATES -->
+        <div class="card">
+            <h2>Order Templates</h2>
+            <div id="templates-list"><div class="empty-state" style="padding:20px;"><p>No templates saved yet. Build an order and click "Save as Template".</p></div></div>
+        </div>
+
+        <!-- ORDER HISTORY -->
+        <div class="card">
+            <h2>Order History</h2>
+            <div id="order-history-list"><div class="empty-state"><p>No orders yet.</p></div></div>
+        </div>
+    </div>
+
+    <!-- CATALOG TAB -->
+    <div id="catalog" class="tab-content">
+        <div class="card">
+            <h2>Product Catalog</h2>
+            <div style="margin-top:14px;"><input type="text" id="catalog-search" placeholder="Search catalog..." style="width:100%;margin-bottom:14px;"></div>
+            <div style="overflow-x:auto;">
+                <table class="log-table">
+                    <thead><tr><th>Peptide</th><th>Size</th><th>Vials/Kit</th><th>Price</th><th>Description</th></tr></thead>
+                    <tbody id="catalog-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="settings" class="tab-content">
+        <div class="card">
+            <h2>⚙️ Settings</h2>
+
+            <div class="settings-section">
+                <h3>Appearance</h3>
+                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                    <span style="color:var(--text-secondary);font-size:0.9rem;">Current theme:</span>
+                    <button class="btn-ghost btn-small" onclick="toggleTheme()" id="settings-theme-btn">Switch to Light Mode</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Protocol Templates</h3>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Save a named collection of peptides with dose schedules. Apply a template to add multiple peptides to supply at once.</p>
+                <button class="btn-primary btn-small" onclick="openCreateProtocolModal()">+ Create Protocol Template</button>
+                <div id="protocol-templates-list" style="margin-top:16px;"></div>
+            </div>
+
+            <div class="settings-section">
+                <h3>Data Backup &amp; Restore</h3>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export all your data as a JSON file for safekeeping, or restore from a previous backup.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn-ghost btn-small" onclick="backupData()">⬇ Backup Data</button>
+                    <button class="btn-ghost btn-small" onclick="document.getElementById('restore-file').click()">⬆ Restore Data</button>
+                    <input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreData(event)">
+                    <button class="btn-danger btn-small" onclick="clearAllData()">🗑️ Clear All Data</button>
+                </div>
+                <div class="tip-box" style="margin-top:12px;">Data is stored locally in your browser. Regular backups protect against browser data loss.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="reconstitute-modal">
+    <div class="modal">
+        <h2>💧 Reconstitute Vial</h2>
+        <form id="reconstitute-form">
+            <input type="hidden" id="recon-peptide-id">
+            <div class="form-group"><label>Water Type</label>
+                <select id="water-type">
+                    <option value="BAC">Bacteriostatic Water (BAC)</option>
+                    <option value="AA">Acetic Acid (AA)</option>
+                    <option value="Sterile">Sterile Water</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-top:14px;"><label>Amount of Water (mL)</label><input type="number" id="water-ml" step="0.1" min="0.1" required placeholder="e.g. 2"></div>
+            <div id="recon-preview" style="margin-top:14px;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost btn-small" onclick="closeModal('reconstitute-modal')">Cancel</button>
+                <button type="submit" class="btn-success">Reconstitute</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+        <h2>✏️ Edit Supply</h2>
+        <form id="edit-form">
+            <input type="hidden" id="edit-id">
+            <div class="form-grid">
+                <div class="form-group"><label>Vials on Hand</label><input type="number" id="edit-vials" required min="0"></div>
+                <div class="form-group"><label id="edit-dose-label">Your Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
+                <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
+                <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
+                <div class="form-group"><label>Syringe Type</label>
+                    <select id="edit-syringe">
+                        <option value="U100">U-100 (1 unit = 0.01 mL)</option>
+                        <option value="U50">U-50 (1 unit = 0.02 mL)</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
+            </div>
+            <div class="form-group" style="margin-top:14px;"><label>Card Color</label><div class="color-picker-row" id="edit-color-picker"></div></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost btn-small" onclick="closeModal('edit-modal')">Cancel</button>
+                <button type="submit" class="btn-success">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="cycle-modal">
+    <div class="modal">
+        <h2>🔄 Cycle Details</h2>
+        <div id="cycle-modal-content"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('cycle-modal')">Close</button>
+            <button type="button" class="btn-danger btn-small" id="cycle-end-btn" style="display:none;">End Cycle</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="protocol-modal">
+    <div class="modal">
+        <h2>📋 Create Protocol Template</h2>
+        <div class="form-group" style="margin-bottom:14px;"><label>Template Name *</label><input type="text" id="proto-name" placeholder="e.g. Injury Stack"></div>
+        <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:10px;">Select peptides from your current supply to include:</p>
+        <div id="proto-peptide-list" style="max-height:280px;overflow-y:auto;"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('protocol-modal')">Cancel</button>
+            <button type="button" class="btn-success" onclick="saveProtocolTemplate()">Save Template</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="template-selector-modal">
+    <div class="modal">
+        <h2>📋 Start from Template</h2>
+        <div id="template-selector-list"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('template-selector-modal')">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+// CATALOG DATA
+// ============================================================
+var CATALOG = [
+    {name:"AOD9604",mgPerVial:5,vialsPerKit:10,price:100},
+    {name:"AOD9604",mgPerVial:2,vialsPerKit:10,price:55},
+    {name:"BPC-157 + TB-500 Blend",mgPerVial:10,vialsPerKit:10,price:99,note:"5mg BPC-157 + 5mg TB-500"},
+    {name:"BPC-157 + TB-500 Blend",mgPerVial:20,vialsPerKit:10,price:179,note:"10mg BPC-157 + 10mg TB-500"},
+    {name:"GHK-Cu",mgPerVial:50,vialsPerKit:10,price:39},
+    {name:"GHK-Cu",mgPerVial:100,vialsPerKit:10,price:59},
+    {name:"IGF-1 LR3",mgPerVial:0.1,vialsPerKit:10,price:49},
+    {name:"IGF-1 LR3",mgPerVial:1,vialsPerKit:10,price:220},
+    {name:"Retatrutide",mgPerVial:5,vialsPerKit:10,price:70},
+    {name:"Retatrutide",mgPerVial:10,vialsPerKit:10,price:99},
+    {name:"Retatrutide",mgPerVial:15,vialsPerKit:10,price:135},
+    {name:"Retatrutide",mgPerVial:20,vialsPerKit:10,price:159},
+    {name:"Retatrutide",mgPerVial:30,vialsPerKit:10,price:189},
+    {name:"Retatrutide",mgPerVial:60,vialsPerKit:10,price:299},
+    {name:"Tirzepatide",mgPerVial:5,vialsPerKit:10,price:55},
+    {name:"Tirzepatide",mgPerVial:10,vialsPerKit:10,price:65},
+    {name:"Tirzepatide",mgPerVial:15,vialsPerKit:10,price:75},
+    {name:"Tirzepatide",mgPerVial:20,vialsPerKit:10,price:89},
+    {name:"Tirzepatide",mgPerVial:30,vialsPerKit:10,price:109},
+    {name:"Tirzepatide",mgPerVial:40,vialsPerKit:10,price:149},
+    {name:"Tirzepatide",mgPerVial:60,vialsPerKit:10,price:209},
+    {name:"Tesamorelin",mgPerVial:5,vialsPerKit:10,price:99},
+    {name:"Tesamorelin",mgPerVial:10,vialsPerKit:10,price:159},
+    {name:"Tesamorelin",mgPerVial:20,vialsPerKit:10,price:299},
+    {name:"Semax",mgPerVial:5,vialsPerKit:10,price:39},
+    {name:"Semaglutide",mgPerVial:5,vialsPerKit:10,price:40},
+    {name:"Semaglutide",mgPerVial:10,vialsPerKit:10,price:59},
+    {name:"Semaglutide",mgPerVial:20,vialsPerKit:10,price:85},
+    {name:"Semaglutide",mgPerVial:30,vialsPerKit:10,price:109},
+    {name:"Cagrilintide",mgPerVial:5,vialsPerKit:10,price:89},
+    {name:"Cagrilintide",mgPerVial:10,vialsPerKit:10,price:139},
+    {name:"Cagrilintide",mgPerVial:20,vialsPerKit:10,price:245},
+    {name:"Survodutide",mgPerVial:10,vialsPerKit:10,price:249},
+    {name:"Mazdutide",mgPerVial:5,vialsPerKit:10,price:119},
+    {name:"Mazdutide",mgPerVial:10,vialsPerKit:10,price:219},
+    {name:"BPC-157",mgPerVial:5,vialsPerKit:10,price:39},
+    {name:"BPC-157",mgPerVial:10,vialsPerKit:10,price:59},
+    {name:"TB-500",mgPerVial:5,vialsPerKit:10,price:79,note:"Thymosin B4 Acetate"},
+    {name:"TB-500",mgPerVial:10,vialsPerKit:10,price:129,note:"Thymosin B4 Acetate"},
+    {name:"Melanotan I",mgPerVial:10,vialsPerKit:10,price:49},
+    {name:"Melanotan II",mgPerVial:10,vialsPerKit:10,price:49},
+    {name:"MGF",mgPerVial:2,vialsPerKit:10,price:79},
+    {name:"PEG-MGF",mgPerVial:2,vialsPerKit:10,price:95},
+    {name:"HGH (Somatropin)",mgPerVial:10,vialsPerKit:10,price:59,unit:"IU"},
+    {name:"HGH (Somatropin)",mgPerVial:24,vialsPerKit:10,price:109,unit:"IU"},
+    {name:"HGH (Somatropin)",mgPerVial:36,vialsPerKit:10,price:159,unit:"IU"},
+    {name:"HCG",mgPerVial:5000,vialsPerKit:10,price:75,unit:"IU"},
+    {name:"HCG",mgPerVial:10000,vialsPerKit:10,price:135,unit:"IU"},
+    {name:"HMG",mgPerVial:75,vialsPerKit:10,price:79,unit:"IU"},
+    {name:"HGH Fragment 176-191",mgPerVial:5,vialsPerKit:10,price:79},
+    {name:"HGH Fragment 176-191",mgPerVial:10,vialsPerKit:10,price:159},
+    {name:"GLOW Blend",mgPerVial:70,vialsPerKit:10,price:185,note:"GHK-Cu 50mg + TB-500 10mg + BPC-157 10mg"},
+    {name:"KLOW Blend",mgPerVial:80,vialsPerKit:10,price:199,note:"BPC-157 10mg + GHK-Cu 50mg + TB-500 10mg + KPV 10mg"},
+    {name:"Ipamorelin",mgPerVial:5,vialsPerKit:10,price:49},
+    {name:"Ipamorelin",mgPerVial:10,vialsPerKit:10,price:75},
+    {name:"Sermorelin",mgPerVial:5,vialsPerKit:10,price:69},
+    {name:"Sermorelin",mgPerVial:10,vialsPerKit:10,price:130},
+    {name:"Thymalin",mgPerVial:10,vialsPerKit:10,price:69},
+    {name:"CJC-1295 with DAC",mgPerVial:5,vialsPerKit:10,price:150},
+    {name:"CJC-1295 (no DAC)",mgPerVial:5,vialsPerKit:10,price:79},
+    {name:"CJC-1295 (no DAC)",mgPerVial:10,vialsPerKit:10,price:139},
+    {name:"CJC-1295 + Ipamorelin Blend",mgPerVial:10,vialsPerKit:10,price:109,note:"5mg CJC-1295 + 5mg Ipamorelin"},
+    {name:"CJC-1295 + Ipamorelin Blend",mgPerVial:20,vialsPerKit:10,price:179,note:"10mg CJC-1295 + 10mg Ipamorelin"},
+    {name:"Vesugen",mgPerVial:10,vialsPerKit:10,price:105},
+    {name:"Epithalon",mgPerVial:10,vialsPerKit:10,price:45},
+    {name:"Epithalon",mgPerVial:50,vialsPerKit:10,price:150},
+    {name:"GHRP-2",mgPerVial:5,vialsPerKit:10,price:45},
+    {name:"GHRP-2",mgPerVial:10,vialsPerKit:10,price:65},
+    {name:"GHRP-6",mgPerVial:5,vialsPerKit:10,price:45},
+    {name:"GHRP-6",mgPerVial:10,vialsPerKit:10,price:65},
+    {name:"Hexarelin",mgPerVial:5,vialsPerKit:10,price:110},
+    {name:"AHK-Cu",mgPerVial:50,vialsPerKit:10,price:59},
+    {name:"AHK-Cu",mgPerVial:100,vialsPerKit:10,price:75},
+    {name:"KissPeptin-10",mgPerVial:5,vialsPerKit:10,price:65},
+    {name:"KissPeptin-10",mgPerVial:10,vialsPerKit:10,price:80},
+    {name:"NAD+",mgPerVial:500,vialsPerKit:10,price:65},
+    {name:"NAD+",mgPerVial:1000,vialsPerKit:10,price:119},
+    {name:"Botulinum Toxin",mgPerVial:100,vialsPerKit:10,price:159,unit:"IU"},
+    {name:"MOTS-c",mgPerVial:10,vialsPerKit:10,price:59},
+    {name:"MOTS-c",mgPerVial:40,vialsPerKit:10,price:175},
+    {name:"Thymosin Alpha-1",mgPerVial:5,vialsPerKit:10,price:100},
+    {name:"Thymosin Alpha-1",mgPerVial:10,vialsPerKit:10,price:180},
+    {name:"PT-141",mgPerVial:10,vialsPerKit:10,price:69},
+    {name:"5-Amino-1MQ",mgPerVial:5,vialsPerKit:10,price:40},
+    {name:"5-Amino-1MQ",mgPerVial:10,vialsPerKit:10,price:55},
+    {name:"5-Amino-1MQ",mgPerVial:50,vialsPerKit:10,price:80},
+    {name:"PE-22-28",mgPerVial:10,vialsPerKit:10,price:80},
+    {name:"Humanin",mgPerVial:10,vialsPerKit:10,price:220},
+    {name:"Cerebrolysin",mgPerVial:60,vialsPerKit:6,price:90},
+    {name:"Cardiogen",mgPerVial:20,vialsPerKit:10,price:105},
+    {name:"Cortagen",mgPerVial:20,vialsPerKit:10,price:105},
+    {name:"Crystagen",mgPerVial:20,vialsPerKit:10,price:105},
+    {name:"GDF-8 (Myostatin)",mgPerVial:1,vialsPerKit:10,price:210},
+    {name:"Melatonin",mgPerVial:10,vialsPerKit:10,price:120},
+    {name:"Gonadorelin",mgPerVial:2,vialsPerKit:10,price:60},
+    {name:"Gonadorelin",mgPerVial:5,vialsPerKit:10,price:95},
+    {name:"P21 (P021)",mgPerVial:5,vialsPerKit:10,price:290},
+    {name:"Snap-8",mgPerVial:10,vialsPerKit:10,price:49},
+    {name:"Adipotide (FTTP)",mgPerVial:5,vialsPerKit:10,price:160},
+    {name:"Adipotide (FTTP)",mgPerVial:10,vialsPerKit:10,price:260},
+    {name:"ACE-031",mgPerVial:1,vialsPerKit:10,price:79},
+    {name:"Selank",mgPerVial:5,vialsPerKit:10,price:39},
+    {name:"Selank",mgPerVial:10,vialsPerKit:10,price:69},
+    {name:"Oxytocin",mgPerVial:5,vialsPerKit:10,price:70},
+    {name:"Oxytocin",mgPerVial:10,vialsPerKit:10,price:95},
+    {name:"SS-31 (Elamipretide)",mgPerVial:10,vialsPerKit:10,price:85},
+    {name:"SS-31 (Elamipretide)",mgPerVial:50,vialsPerKit:10,price:300},
+    {name:"SLU-PP-332",mgPerVial:5,vialsPerKit:10,price:99},
+    {name:"Lipo-C (without B12)",mgPerVial:10,vialsPerKit:10,price:70,note:"Methionine 15mg + Choline 50mg + L-Carnitine 50mg + Dexpanthenol 5mg"},
+    {name:"Lipo-C (with B12)",mgPerVial:10,vialsPerKit:10,price:90,note:"Methionine 15mg + Choline 50mg + L-Carnitine 50mg + Dexpanthenol 5mg + B12 1mg"},
+    {name:"B12 (Methylcobalamin)",mgPerVial:1,vialsPerKit:10,price:40,note:"1mg/10ml vials"},
+    {name:"Pinealon",mgPerVial:10,vialsPerKit:10,price:89},
+    {name:"Lemon Bottle",mgPerVial:10,vialsPerKit:10,price:70},
+    {name:"Orexin A",mgPerVial:10,vialsPerKit:10,price:460},
+    {name:"Orexin B",mgPerVial:5,vialsPerKit:10,price:120},
+    {name:"Orexin B",mgPerVial:10,vialsPerKit:10,price:200},
+    {name:"L-Carnitine",mgPerVial:200,vialsPerKit:10,price:60,note:"200mg/10ml"},
+    {name:"L-Carnitine",mgPerVial:400,vialsPerKit:10,price:70,note:"400mg/10ml"},
+    {name:"L-Carnitine",mgPerVial:600,vialsPerKit:10,price:80,note:"600mg/10ml"},
+    {name:"L-Carnitine",mgPerVial:1200,vialsPerKit:10,price:90,note:"1200mg/10ml"},
+    {name:"L-Carnitine",mgPerVial:2000,vialsPerKit:10,price:120,note:"2000mg/10ml"},
+    {name:"L-Carnitine",mgPerVial:5000,vialsPerKit:10,price:150,note:"5000mg/10ml"},
+    {name:"KPV",mgPerVial:10,vialsPerKit:10,price:69},
+    {name:"VIP",mgPerVial:5,vialsPerKit:10,price:85},
+    {name:"VIP",mgPerVial:10,vialsPerKit:10,price:180},
+    {name:"ARA-290",mgPerVial:10,vialsPerKit:10,price:80},
+    {name:"FOXO4-DRI",mgPerVial:10,vialsPerKit:10,price:370},
+    {name:"Glutathione",mgPerVial:600,vialsPerKit:10,price:75},
+    {name:"Glutathione",mgPerVial:1500,vialsPerKit:10,price:89},
+    {name:"LL-37",mgPerVial:5,vialsPerKit:10,price:99},
+    {name:"DSIP",mgPerVial:5,vialsPerKit:10,price:49},
+    {name:"DSIP",mgPerVial:10,vialsPerKit:10,price:75},
+    {name:"Dihexa",mgPerVial:5,vialsPerKit:10,price:69},
+    {name:"Dihexa",mgPerVial:10,vialsPerKit:10,price:130},
+    {name:"Relaxation PM Blend",mgPerVial:10,vialsPerKit:10,price:140,note:"GABA 100mg + Arginine 100mg + Glutamine 25mg per mL"},
+    {name:"Super Human Blend",mgPerVial:10,vialsPerKit:10,price:140,note:"L-Arginine + L-Ornithine + L-Citrulline + L-Lysine + L-Glutamine + L-Proline + L-Taurine + L-Carnitine + NAC"},
+    {name:"Healthy Hair Skin Nails Blend",mgPerVial:10,vialsPerKit:10,price:140,note:"Thiamine HCl + Pantothenic Acid + Choline + Niacin + Biotin + Folic Acid"},
+    {name:"Sterile Water",mgPerVial:3,vialsPerKit:10,price:10,unit:"mL"},
+    {name:"Sterile Water",mgPerVial:10,vialsPerKit:10,price:20,unit:"mL"},
+    {name:"BAC Water",mgPerVial:3,vialsPerKit:10,price:8,unit:"mL"},
+    {name:"BAC Water",mgPerVial:10,vialsPerKit:10,price:18,unit:"mL"},
+    {name:"AA Water",mgPerVial:3,vialsPerKit:10,price:10,unit:"mL"},
+    {name:"AA Water",mgPerVial:10,vialsPerKit:10,price:20,unit:"mL"}
+];
+
+var DESCRIPTIONS = {
+    "AOD9604":"Synthetic HGH fragment (176-191) stimulating lipolysis without affecting blood sugar or IGF-1. Typical dose: 250-500mcg daily on empty stomach.",
+    "BPC-157":"Gastric pentadecapeptide accelerating healing of muscles, tendons, ligaments, and GI tract. Typical dose: 250-500mcg 1-2x daily.",
+    "TB-500":"Synthetic thymosin beta-4 promoting systemic tissue repair and reducing inflammation. Loading: 2-5mg twice weekly.",
+    "BPC-157 + TB-500 Blend":"Synergistic BPC-157 localized healing with TB-500 systemic repair for comprehensive recovery.",
+    "GHK-Cu":"Copper peptide stimulating collagen synthesis and wound healing. Typical dose: 1-2mg daily.",
+    "IGF-1 LR3":"Long-acting IGF-1 variant promoting muscle protein synthesis. Typical dose: 20-50mcg daily.",
+    "Retatrutide":"Triple GLP-1/GIP/glucagon agonist with potent weight loss. Weekly dosing from 1mg.",
+    "Tirzepatide":"Dual GLP-1/GIP agonist. FDA-approved as Mounjaro/Zepbound. Weekly dosing 2.5mg to 15mg.",
+    "Tesamorelin":"GHRH analog reducing visceral fat. FDA-approved for HIV lipodystrophy. Typical dose: 2mg daily.",
+    "Semax":"ACTH-derived nootropic enhancing cognition and neuroprotection. Typical dose: 200-600mcg intranasally.",
+    "Semaglutide":"GLP-1 agonist for weight loss. FDA-approved as Ozempic/Wegovy. Weekly from 0.25mg to 2.4mg.",
+    "Cagrilintide":"Long-acting amylin analog reducing appetite. Often paired with semaglutide. Weekly dosing.",
+    "Survodutide":"Dual GLP-1/glucagon agonist with potent weight loss. Weekly dosing.",
+    "Mazdutide":"GLP-1/glucagon dual agonist for obesity and NAFLD. Weekly dosing.",
+    "Melanotan I":"Synthetic α-MSH analog for UV-independent melanogenesis. Loading dose: 0.5-1mg daily.",
+    "Melanotan II":"Potent melanocortin agonist for tanning with libido effects. Typical dose: 0.25-0.5mg daily.",
+    "MGF":"Mechano Growth Factor — IGF-1 splice variant activating muscle satellite cells. Typical dose: 200mcg post-workout.",
+    "PEG-MGF":"Pegylated MGF with extended systemic half-life. Typical dose: 200mcg every 2-3 days.",
+    "HGH (Somatropin)":"Recombinant human growth hormone for muscle growth and fat loss. Typical dose: 2-4 IU daily.",
+    "HCG":"Mimics LH to stimulate testosterone. Typical dose: 250-500 IU 2-3x/week.",
+    "HMG":"Contains FSH and LH for complete gonadal stimulation. Used for fertility protocols.",
+    "HGH Fragment 176-191":"Isolated lipolytic HGH fragment. Best fasted. Typical dose: 250-500mcg 1-2x daily.",
+    "GLOW Blend":"Triple-peptide blend: GHK-Cu + TB-500 + BPC-157 for comprehensive tissue restoration.",
+    "KLOW Blend":"Enhanced healing blend adding KPV to BPC-157, GHK-Cu, and TB-500.",
+    "Ipamorelin":"Selective GH secretagogue with minimal side effects. Typical dose: 200-300mcg 2-3x daily.",
+    "Sermorelin":"GHRH analog restoring pulsatile GH secretion. Typical dose: 200-500mcg before bed.",
+    "Thymalin":"Thymic peptide supporting immune cell maturation and T-lymphocyte function.",
+    "CJC-1295 with DAC":"Long-acting GHRH analog. Sustained GH elevation 1-2 weeks. Dosed 2mg 1-2x/week.",
+    "CJC-1295 (no DAC)":"Modified GRF for pulsatile GH release. Typical dose: 100-200mcg 2-3x daily.",
+    "CJC-1295 + Ipamorelin Blend":"Synergistic GHRH + secretagogue for amplified clean GH pulses.",
+    "Vesugen":"Khavinson bioregulator targeting vascular endothelial function.",
+    "Epithalon":"Telomerase-activating tetrapeptide with anti-aging properties. Typical: 5-10mg daily for 10-20 day courses.",
+    "GHRP-2":"Potent GH secretagogue with appetite stimulation. Typical dose: 100-300mcg 2-3x daily.",
+    "GHRP-6":"GH secretagogue mimicking ghrelin with hunger stimulation. Typical dose: 100-300mcg 2-3x daily.",
+    "Hexarelin":"Potent GHRP with cardioprotective properties. Typical dose: 100-200mcg 2-3x daily.",
+    "AHK-Cu":"Copper-binding tripeptide with wound healing and collagen synthesis properties.",
+    "KissPeptin-10":"Hypothalamic neuropeptide stimulating GnRH to increase LH and testosterone.",
+    "NAD+":"Coenzyme for cellular energy, DNA repair, and sirtuin activation.",
+    "MOTS-c":"Mitochondrial peptide enhancing metabolic flexibility. Typical dose: 5-10mg 2-3x/week.",
+    "Thymosin Alpha-1":"Immune-modulating thymic peptide. Typical dose: 1.6mg daily or EOD.",
+    "PT-141":"Melanocortin agonist for sexual dysfunction via CNS activation. Typical dose: 1-2mg as needed.",
+    "5-Amino-1MQ":"NNMT inhibitor promoting fat mobilization. Typical dose: 50-100mg daily.",
+    "PE-22-28":"Spadin-derived peptide with antidepressant effects via TREK-1 antagonism.",
+    "Humanin":"Mitochondria-encoded peptide with cytoprotective and neuroprotective effects.",
+    "Cerebrolysin":"Brain-derived peptide mixture for stroke recovery and neuroprotection.",
+    "Cardiogen":"Khavinson bioregulator targeting cardiac tissue health.",
+    "Cortagen":"Bioregulator supporting CNS neuron function.",
+    "Crystagen":"Thymus-targeting bioregulator for immune cell development.",
+    "GDF-8 (Myostatin)":"Myostatin inhibitor research compound for muscle mass regulation.",
+    "Melatonin":"Neurohormone regulating circadian rhythm and sleep. Injectable for precise bioavailability.",
+    "Gonadorelin":"Synthetic GnRH stimulating LH and FSH. Used for fertility and testosterone support.",
+    "P21 (P021)":"CNTF-derived peptide enhancing hippocampal neurogenesis.",
+    "Snap-8":"Acetyl octapeptide-3 reducing expression lines by moderating acetylcholine release.",
+    "Adipotide (FTTP)":"Proapoptotic peptide targeting adipose vasculature. Highly experimental.",
+    "ACE-031":"Soluble activin receptor blocking myostatin for muscle mass research.",
+    "Selank":"Anxiolytic nootropic heptapeptide with immune-modulating properties. Typical: 200-400mcg intranasally.",
+    "Oxytocin":"Neuropeptide modulating social bonding, trust, and anxiety reduction.",
+    "SS-31 (Elamipretide)":"Mitochondria-targeting tetrapeptide reducing oxidative stress.",
+    "SLU-PP-332":"ERRα/γ agonist mimicking endurance exercise effects on muscle metabolism.",
+    "Pinealon":"Pineal gland bioregulator supporting neuronal health.",
+    "Orexin A":"Hypothalamic neuropeptide regulating wakefulness and arousal.",
+    "Orexin B":"Wakefulness-promoting peptide with distinct receptor profile from Orexin A.",
+    "KPV":"Anti-inflammatory α-MSH-derived tripeptide. Typical dose: 200-500mcg daily.",
+    "VIP":"Vasoactive intestinal peptide with anti-inflammatory and neuroprotective effects.",
+    "ARA-290":"EPO-derived tissue-protective peptide without red blood cell stimulation.",
+    "FOXO4-DRI":"Senolytic peptide inducing apoptosis in senescent cells.",
+    "Glutathione":"Master antioxidant for detoxification and immune support.",
+    "LL-37":"Human cathelicidin with broad antimicrobial activity and wound healing promotion.",
+    "DSIP":"Delta sleep-inducing peptide. Typical dose: 100-300mcg before bed.",
+    "Dihexa":"Potent nootropic enhancing synaptic connectivity via HGF/MET signaling.",
+    "L-Carnitine":"Fatty acid transporter into mitochondria. Injectable for full bioavailability.",
+    "B12 (Methylcobalamin)":"Active cobalamin for nerve function and energy. Injectable bypasses absorption issues.",
+    "Lipo-C (without B12)":"Lipotropic blend supporting hepatic fat metabolism.",
+    "Lipo-C (with B12)":"Complete lipotropic blend with methylcobalamin for enhanced fat mobilization.",
+    "Lemon Bottle":"Injectable lipolytic compound targeting subcutaneous fat.",
+    "Botulinum Toxin":"Neurotoxin blocking acetylcholine at neuromuscular junctions.",
+    "BAC Water":"Bacteriostatic water with 0.9% benzyl alcohol. Safe for multi-use reconstitution over 28 days.",
+    "Sterile Water":"Sterile water for injection. Single-use only.",
+    "AA Water":"Acetic acid solution for peptides requiring acidic pH such as GHK-Cu.",
+    "Relaxation PM Blend":"Injectable blend for sleep and recovery: GABA, arginine, and glutamine.",
+    "Super Human Blend":"Comprehensive amino acid injectable for protein synthesis and energy.",
+    "Healthy Hair Skin Nails Blend":"B-vitamin and cofactor injectable supporting keratin and collagen production."
+};
+
+var PEPTIDE_COLORS = [
+    '#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6',
+    '#06b6d4','#f97316','#ec4899','#10b981','#6366f1',
+    '#84cc16','#14b8a6','#f43f5e','#a855f7','#0ea5e9'
+];
+
+var INJECTION_SITES = [
+    'Abdomen - Left','Abdomen - Right',
+    'Thigh - Left','Thigh - Right',
+    'Deltoid - Left','Deltoid - Right',
+    'Glute - Left','Glute - Right','Other'
+];
+
+// ============================================================
+// IndexedDB LAYER
+// ============================================================
+var DB_NAME    = 'PeptideTrackerDB';
+var DB_VERSION = 1;
+var STORES     = ['peptides','doses','cycles','orders','templates','protocols','settings'];
+var idb        = null;
+
+function openDB() {
+    return new Promise(function(resolve, reject) {
+        if (idb) { resolve(idb); return; }
+        var req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = function(e) {
+            var db = e.target.result;
+            STORES.forEach(function(s) {
+                if (!db.objectStoreNames.contains(s)) {
+                    db.createObjectStore(s, {keyPath:'id'});
+                }
+            });
+        };
+        req.onsuccess = function(e) { idb = e.target.result; resolve(idb); };
+        req.onerror   = function(e) { reject(e.target.error); };
+    });
+}
+
+function dbGetAll(store) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction(store, 'readonly');
+            var req = tx.objectStore(store).getAll();
+            req.onsuccess = function() { resolve(req.result || []); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+function dbPut(store, obj) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction(store, 'readwrite');
+            var req = tx.objectStore(store).put(obj);
+            req.onsuccess = function() { resolve(); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+function dbDelete(store, id) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction(store, 'readwrite');
+            var req = tx.objectStore(store).delete(id);
+            req.onsuccess = function() { resolve(); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+function dbClear(store) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction(store, 'readwrite');
+            var req = tx.objectStore(store).clear();
+            req.onsuccess = function() { resolve(); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+function dbGet(store, id) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction(store, 'readonly');
+            var req = tx.objectStore(store).get(id);
+            req.onsuccess = function() { resolve(req.result || null); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+// ============================================================
+// APP STATE (in-memory cache loaded from IDB at startup)
+// ============================================================
+var appData = {
+    peptides:  [],
+    doses:     [],
+    cycles:    [],
+    orders:    [],
+    templates: [],
+    protocols: [],
+    settings:  {theme:'dark'}
+};
+
+var activeOrderId   = null;
+var selectedColor   = PEPTIDE_COLORS[0];
+var editSelectedColor = PEPTIDE_COLORS[0];
+
+async function loadAllData() {
+    appData.peptides  = await dbGetAll('peptides');
+    appData.doses     = await dbGetAll('doses');
+    appData.cycles    = await dbGetAll('cycles');
+    appData.orders    = await dbGetAll('orders');
+    appData.templates = await dbGetAll('templates');
+    appData.protocols = await dbGetAll('protocols');
+    var s = await dbGet('settings', 'app_settings');
+    if (s) appData.settings = s;
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+function isIU(p) { return p && p.unit === 'IU'; }
+function doseUnit(p) { return isIU(p) ? 'IU' : 'mcg'; }
+function getDesc(n) { return DESCRIPTIONS[n] || 'Research peptide compound. Consult current literature for usage guidelines.'; }
+function getUniqueNames() { return Array.from(new Set(CATALOG.map(function(p){return p.name;}))).sort(); }
+function getVariants(n) { return CATALOG.filter(function(p){return p.name===n;}); }
+function formatSize(item) { return item.mgPerVial+(item.unit||'mg')+' \xd7 '+item.vialsPerKit+' vials \u2014 $'+item.price; }
+function mlToUnits(ml, t) { return t==='U50' ? ml*50 : ml*100; }
+function fmtDate(s) { return new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}); }
+function fmtDateShort(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}); }
+function fmtDateTime(iso) { return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
+function getPeptideColor(p) {
+    return (p && p.color) ? p.color : 'var(--accent)';
+}
+
+function calcDaysRemaining(p) {
+    if (!p.dailyDose || !p.dosesPerWeek) return null;
+    var vc    = isIU(p) ? p.mgPerVial : p.mgPerVial*1000;
+    var total = p.vialsOnHand * vc;
+    var daily = p.dailyDose * (p.dosesPerWeek/7);
+    if (!daily) return null;
+    return Math.floor(total/daily);
+}
+
+function daysClass(d) {
+    if (d===null) return '';
+    if (d<=7)  return 'days-crit';
+    if (d<=21) return 'days-warn';
+    return 'days-ok';
+}
+
+function calcReconInfo(p) {
+    if (!p.reconstituted) return null;
+    var wml   = p.reconstituted.waterMl;
+    var total = isIU(p) ? p.mgPerVial : p.mgPerVial*1000;
+    var pml   = total/wml;
+    var dose  = p.dailyDose||0;
+    var ml    = dose>0 ? dose/pml : 0;
+    var rem   = (p.reconstituted.remainingUnits!==undefined) ? p.reconstituted.remainingUnits : total;
+    return {
+        waterMl:wml, totalUnits:total, unitsPerMl:pml, concentration:pml/100,
+        remainingUnits:rem, mlPerDose:ml,
+        syringeU100:mlToUnits(ml,'U100'), syringeU50:mlToUnits(ml,'U50'),
+        dosesRemaining:dose>0?Math.floor(rem/dose):0, unit:isIU(p)?'IU':'mcg'
+    };
+}
+
+// ============================================================
+// THEME
+// ============================================================
+function toggleTheme() {
+    var current = document.documentElement.getAttribute('data-theme');
+    var next    = current==='dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    document.getElementById('theme-btn').textContent          = next==='dark' ? '☀️ Light' : '🌙 Dark';
+    document.getElementById('settings-theme-btn').textContent = next==='dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+    appData.settings.theme = next;
+    dbPut('settings', {id:'app_settings', theme:next});
+}
+
+function applyTheme() {
+    var t = appData.settings.theme || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    document.getElementById('theme-btn').textContent          = t==='dark' ? '☀️ Light' : '🌙 Dark';
+    document.getElementById('settings-theme-btn').textContent = t==='dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+}
+
+// ============================================================
+// LOW STOCK NOTIFICATION BANNER (no popups)
+// ============================================================
+function checkLowStockNotification() {
+    var low = appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;});
+    var banner = document.getElementById('notif-banner');
+    if (low.length) {
+        var names = low.map(function(p){return p.name;}).join(', ');
+        banner.textContent = '⚠️ Low stock: '+names+' — check the Reorder tab.';
+        banner.classList.add('show');
+    } else {
+        banner.classList.remove('show');
+    }
+}
+
+// ============================================================
+// COLOR PICKER
+// ============================================================
+function buildColorPicker(containerId, onSelect, currentColor) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    PEPTIDE_COLORS.forEach(function(c) {
+        var sw = document.createElement('div');
+        sw.className = 'color-swatch' + (c===(currentColor||PEPTIDE_COLORS[0])?' selected':'');
+        sw.style.background = c;
+        sw.title = c;
+        sw.onclick = function() {
+            container.querySelectorAll('.color-swatch').forEach(function(s){s.classList.remove('selected');});
+            sw.classList.add('selected');
+            onSelect(c);
+        };
+        container.appendChild(sw);
+    });
+}
+
+// ============================================================
+// TAB NAVIGATION
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+        document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active');});
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        if (btn.dataset.tab==='calendar') renderCalendar();
+        if (btn.dataset.tab==='cycles')   renderCycles();
+        if (btn.dataset.tab==='catalog')  renderCatalog();
+        if (btn.dataset.tab==='reorder')  renderReorderTab();
+        if (btn.dataset.tab==='tracking') renderSiteRotation();
+        if (btn.dataset.tab==='settings') renderProtocolTemplatesList();
+    });
+});
+
+// ============================================================
+// CATALOG DROPDOWN
+// ============================================================
+function initCatalogDropdown() {
+    var sel = document.getElementById('catalog-select');
+    sel.innerHTML = '<option value="">Choose a peptide...</option>' +
+        getUniqueNames().map(function(n){return '<option value="'+n+'">'+n+'</option>';}).join('');
+    buildColorPicker('supply-color-picker', function(c){selectedColor=c;}, PEPTIDE_COLORS[0]);
+}
+
+document.getElementById('catalog-select').addEventListener('change', function() {
+    var name=this.value, varSel=document.getElementById('variant-select');
+    document.getElementById('dose-label').textContent = (name&&getVariants(name)[0]&&getVariants(name)[0].unit==='IU') ? 'Your Dose (IU)' : 'Your Dose (mcg)';
+    if (!name) { varSel.disabled=true; varSel.innerHTML='<option value="">Select peptide first...</option>'; clearPreview(); return; }
+    varSel.disabled=false;
+    varSel.innerHTML='<option value="">Choose size...</option>'+getVariants(name).map(function(v,i){return '<option value="'+i+'">'+formatSize(v)+'</option>';}).join('');
+    clearPreview();
+});
+
+['variant-select','kits-on-hand','daily-dose','doses-per-week','cycle-duration'].forEach(function(id){
+    document.getElementById(id).addEventListener('input', updateAddPreview);
+    document.getElementById(id).addEventListener('change', updateAddPreview);
+});
+
+function clearPreview() {
+    ['display-mg','display-vials','display-price'].forEach(function(id){document.getElementById(id).value='';});
+    document.getElementById('add-preview').style.display='none';
+}
+
+function updateAddPreview() {
+    var name=document.getElementById('catalog-select').value, vidx=document.getElementById('variant-select').value;
+    if (!name||vidx==='') { clearPreview(); return; }
+    var v=getVariants(name)[parseInt(vidx)]; if (!v) { clearPreview(); return; }
+    var kits=parseInt(document.getElementById('kits-on-hand').value)||0;
+    var dose=parseFloat(document.getElementById('daily-dose').value)||0;
+    var dpw=parseInt(document.getElementById('doses-per-week').value)||7;
+    var cd=parseInt(document.getElementById('cycle-duration').value)||0;
+    var unit=v.unit||'mg', isiu=unit==='IU';
+    document.getElementById('display-mg').value=v.mgPerVial+' '+unit;
+    document.getElementById('display-vials').value=v.vialsPerKit;
+    document.getElementById('display-price').value='$'+v.price;
+    document.getElementById('preview-total-label').textContent=isiu?'Total IU:':'Total mg:';
+    var tv=kits*v.vialsPerKit, ta=tv*v.mgPerVial;
+    var se='N/A', ct='N/A';
+    if (dose>0) {
+        var tu=isiu?ta:ta*1000, wu=dose*dpw;
+        if (wu>0){var w=tu/wu; se=w<1?Math.round(w*7)+' days':'~'+w.toFixed(1)+' weeks';}
+        if (cd>0){var t=dose*dpw*cd; ct=t.toFixed(0)+' '+(isiu?'IU':'mcg');}
+    }
+    document.getElementById('preview-name').textContent=name;
+    document.getElementById('preview-total-vials').textContent=tv;
+    document.getElementById('preview-total-mg').textContent=ta+' '+unit;
+    document.getElementById('preview-supply').textContent=se;
+    document.getElementById('preview-cycle-total').textContent=ct;
+    document.getElementById('preview-description').textContent=getDesc(name);
+    document.getElementById('add-preview').style.display='block';
+}
+
+// ============================================================
+// ADD PEPTIDE
+// ============================================================
+document.getElementById('peptide-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var name=document.getElementById('catalog-select').value, vidx=document.getElementById('variant-select').value;
+    if (!name||vidx==='') { alert('Select a peptide and size.'); return; }
+    var v=getVariants(name)[parseInt(vidx)], kits=parseInt(document.getElementById('kits-on-hand').value)||1;
+    var p = {
+        id:genId(), name:name, mgPerVial:v.mgPerVial, unit:v.unit||'mg', vialsPerKit:v.vialsPerKit,
+        costPerKit:v.price, vialsOnHand:kits*v.vialsPerKit,
+        dailyDose:parseFloat(document.getElementById('daily-dose').value)||0,
+        dosesPerWeek:parseInt(document.getElementById('doses-per-week').value)||7,
+        cycleDuration:parseInt(document.getElementById('cycle-duration').value)||0,
+        syringeType:document.getElementById('syringe-type').value,
+        reorderThreshold:parseInt(document.getElementById('reorder-threshold').value)||5,
+        description:getDesc(name), note:v.note||null, color:selectedColor,
+        reconstituted:null, createdAt:new Date().toISOString()
+    };
+    appData.peptides.push(p);
+    await dbPut('peptides', p);
+    renderSupply(); updateDoseDropdown(); updateReorderBadge(); checkLowStockNotification();
+    // reset
+    document.getElementById('catalog-select').value='';
+    var vs=document.getElementById('variant-select'); vs.disabled=true; vs.innerHTML='<option value="">Select peptide first...</option>';
+    document.getElementById('dose-label').textContent='Your Dose (mcg)';
+    document.getElementById('kits-on-hand').value=1;
+    document.getElementById('daily-dose').value='';
+    document.getElementById('cycle-duration').value='';
+    document.getElementById('doses-per-week').value=7;
+    document.getElementById('reorder-threshold').value=5;
+    selectedColor=PEPTIDE_COLORS[0];
+    buildColorPicker('supply-color-picker', function(c){selectedColor=c;}, PEPTIDE_COLORS[0]);
+    clearPreview();
+});
+
+// ============================================================
+// RENDER SUPPLY
+// ============================================================
+function renderSupply() {
+    var grid=document.getElementById('supply-grid'), summary=document.getElementById('supply-summary');
+    if (!appData.peptides.length) {
+        grid.innerHTML='<div class="empty-state" style="grid-column:1/-1;"><p>No peptides added yet.</p></div>';
+        summary.innerHTML=''; return;
+    }
+    var tv=appData.peptides.reduce(function(s,p){return s+p.vialsOnHand;},0);
+    var ls=appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;}).length;
+    var val=appData.peptides.reduce(function(s,p){return s+(p.vialsOnHand/p.vialsPerKit)*p.costPerKit;},0);
+    var ac=(appData.cycles||[]).filter(function(c){return c.status==='active';}).length;
+    summary.innerHTML=
+        '<div class="summary-card"><div class="summary-card-value">'+appData.peptides.length+'</div><div class="summary-card-label">Peptides</div></div>'+
+        '<div class="summary-card"><div class="summary-card-value">'+tv+'</div><div class="summary-card-label">Total Vials</div></div>'+
+        '<div class="summary-card"><div class="summary-card-value" style="color:'+(ls>0?'var(--warning)':'var(--success)')+'">'+ls+'</div><div class="summary-card-label">Low Stock</div></div>'+
+        '<div class="summary-card"><div class="summary-card-value">$'+val.toFixed(0)+'</div><div class="summary-card-label">Est. Value</div></div>'+
+        '<div class="summary-card"><div class="summary-card-value" style="color:var(--purple)">'+ac+'</div><div class="summary-card-label">Active Cycles</div></div>';
+
+    var html='';
+    appData.peptides.forEach(function(p) {
+        var st=getStockStatus(p), sup=calcSupplyStr(p), ri=calcReconInfo(p);
+        var acyc=(appData.cycles||[]).find(function(c){return c.peptideId===p.id&&c.status==='active';});
+        var proj=acyc?calcPostCycleProjection(p,acyc):null;
+        var du=doseUnit(p), pColor=getPeptideColor(p);
+        var syH='';
+        if (ri&&p.dailyDose) {
+            var lb=p.syringeType==='U50'?'U-50':'U-100', u=p.syringeType==='U50'?ri.syringeU50:ri.syringeU100;
+            syH='<div class="syringe-display"><span class="syringe-badge">'+u.toFixed(1)+' units on '+lb+'</span><span class="syringe-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">U-100: '+ri.syringeU100.toFixed(1)+' | U-50: '+ri.syringeU50.toFixed(1)+'</span></div>';
+        }
+        var projHtml='';
+        if (proj) {
+            var pc=proj.postVials<=p.reorderThreshold?'var(--warning)':'var(--success)';
+            projHtml='<div class="peptide-info-row" style="background:rgba(59,130,246,0.06);border-radius:4px;padding:6px 4px;"><span class="info-label">After Cycle</span><span class="info-value" style="color:'+pc+'">~'+proj.postVials+' vials'+(proj.postVials<=p.reorderThreshold?' ⚠️':'')+' left</span></div>';
+        }
+        var reconHtml='';
+        if (ri) {
+            reconHtml='<div class="recon-section"><strong style="color:var(--success);">✓ Active Reconstituted Vial</strong><div class="dose-calc">'+
+                '<p>'+ri.waterMl+' mL '+p.reconstituted.waterType+' — <span class="highlight">'+ri.concentration.toFixed(2)+' '+ri.unit+'/unit</span></p>'+
+                '<p>Remaining: <span class="highlight">'+ri.remainingUnits.toFixed(1)+' '+ri.unit+'</span> ('+ri.dosesRemaining+' doses)</p>'+
+                '<p>Draw <span class="highlight">'+ri.mlPerDose.toFixed(3)+' mL</span> for '+p.dailyDose+' '+du+'</p>'+
+                syH+'</div></div>';
+        }
+        html+='<div class="peptide-card '+(acyc?'has-active-cycle':'')+'" style="border-color:'+pColor+'40;">'+
+            '<h3><span class="color-dot" style="background:'+pColor+';"></span>'+p.name+(acyc?' <span class="status-badge status-cycle">● Active</span>':'')+'</h3>'+
+            '<div class="peptide-info">'+
+            '<div class="peptide-info-row"><span class="info-label">Vials on Hand</span><span class="info-value">'+p.vialsOnHand+' <span class="status-badge '+st.cls+'">'+st.txt+'</span></span></div>'+
+            '<div class="peptide-info-row"><span class="info-label">Size</span><span class="info-value">'+p.mgPerVial+' '+p.unit+'/vial</span></div>'+
+            '<div class="peptide-info-row"><span class="info-label">Your Dose</span><span class="info-value">'+(p.dailyDose||'—')+' '+du+' × '+p.dosesPerWeek+'/wk</span></div>'+
+            '<div class="peptide-info-row"><span class="info-label">Cycle Duration</span><span class="info-value">'+(p.cycleDuration?p.cycleDuration+' weeks':'—')+'</span></div>'+
+            '<div class="peptide-info-row"><span class="info-label">Est. Supply</span><span class="info-value">'+sup+'</span></div>'+
+            '<div class="peptide-info-row"><span class="info-label">Cost</span><span class="info-value">$'+p.costPerKit+' / '+p.vialsPerKit+' vials</span></div>'+
+            projHtml+'</div>'+
+            '<div class="peptide-description">'+p.description+'</div>'+
+            reconHtml+
+            '<div class="peptide-actions">'+
+            (!ri?'<button class="btn-primary btn-small" onclick="openReconstitute(\''+p.id+'\')">💧 Reconstitute</button>':
+                  '<button class="btn-warning btn-small" onclick="finishVial(\''+p.id+'\')">✓ Finish Vial</button>')+
+            ' <button class="btn-ghost btn-small" onclick="openEdit(\''+p.id+'\')">✏️ Edit</button>'+
+            ' <button class="btn-danger btn-small" onclick="deletePeptide(\''+p.id+'\')">🗑️</button>'+
+            '</div></div>';
+    });
+    grid.innerHTML=html;
+}
+
+function getStockStatus(p) {
+    if (p.vialsOnHand===0) return {txt:'OUT',cls:'status-critical'};
+    if (p.vialsOnHand<=p.reorderThreshold) return {txt:'LOW',cls:'status-low'};
+    return {txt:'OK',cls:'status-good'};
+}
+
+function calcSupplyStr(p) {
+    if (!p.dailyDose) return 'N/A';
+    var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    var total=p.vialsOnHand*vc, weekly=p.dailyDose*p.dosesPerWeek;
+    if (!weekly) return 'N/A';
+    var w=total/weekly;
+    return w<1?Math.round(w*7)+' days':'~'+w.toFixed(1)+' weeks';
+}
+
+function calcPostCycleProjection(p, cycle) {
+    if (!p.dailyDose||!p.cycleDuration) return null;
+    var end=new Date(cycle.startDate+'T00:00:00');
+    end.setDate(end.getDate()+p.cycleDuration*7);
+    var today=new Date(); today.setHours(0,0,0,0);
+    var dr=Math.max(0,Math.ceil((end-today)/86400000));
+    var ur=p.dailyDose*(p.dosesPerWeek/7)*dr;
+    var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    return {postVials:Math.max(0,Math.floor(p.vialsOnHand-ur/vc)),daysRemaining:dr};
+}
+
+// ============================================================
+// INJECTION SITE ROTATION
+// ============================================================
+function renderSiteRotation() {
+    var grid=document.getElementById('rotation-grid');
+    var recent=appData.doses.slice().sort(function(a,b){return b.date.localeCompare(a.date)||((b.time||'').localeCompare(a.time||''));}).slice(0,14);
+    var lastUsed={};
+    recent.forEach(function(d,i){if(d.site&&lastUsed[d.site]===undefined)lastUsed[d.site]=i;});
+    var sorted=INJECTION_SITES.filter(function(s){return s!=='Other';}).sort(function(a,b){
+        var ua=lastUsed[a]!==undefined?lastUsed[a]:999;
+        var ub=lastUsed[b]!==undefined?lastUsed[b]:999;
+        return ub-ua;
+    });
+    var next=sorted[sorted.length-1];
+    var html='';
+    sorted.forEach(function(site){
+        var last=lastUsed[site];
+        var isNext=site===next;
+        var isRecent=last!==undefined&&last<3;
+        var cls='rotation-site'+(isNext?' next':isRecent?' recent':'');
+        var badgeHtml='';
+        if (isNext) badgeHtml='<span class="rotation-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">⬅ Next</span>';
+        else if (last===0) badgeHtml='<span class="rotation-badge" style="background:rgba(239,68,68,0.15);color:var(--danger);">Last used</span>';
+        else if (last!==undefined) badgeHtml='<span class="rotation-badge" style="background:rgba(245,158,11,0.15);color:var(--warning);">'+last+' ago</span>';
+        else badgeHtml='<span class="rotation-badge" style="background:rgba(148,163,184,0.15);color:var(--text-secondary);">Unused</span>';
+        html+='<div class="'+cls+'"><div class="rotation-site-name">'+site+'</div>'+badgeHtml+'</div>';
+    });
+    grid.innerHTML=html||'<p style="color:var(--text-secondary);">Log injections with site info to see rotation guidance.</p>';
+}
+
+// ============================================================
+// RECONSTITUTE
+// ============================================================
+function openReconstitute(id) {
+    document.getElementById('recon-peptide-id').value=id;
+    document.getElementById('water-ml').value='';
+    document.getElementById('recon-preview').innerHTML='';
+    document.getElementById('reconstitute-modal').classList.add('active');
+}
+
+document.getElementById('water-ml').addEventListener('input', function() {
+    var id=document.getElementById('recon-peptide-id').value, ml=parseFloat(this.value);
+    var p=appData.peptides.find(function(x){return x.id===id;});
+    var pre=document.getElementById('recon-preview');
+    if (!p||!ml||ml<=0){pre.innerHTML='';return;}
+    var total=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    var pml=total/ml, du=isIU(p)?'IU':'mcg', dose=p.dailyDose||0;
+    var mpd=dose>0?dose/pml:0, doses=dose>0?Math.floor(total/dose):0;
+    pre.innerHTML='<div class="dose-calc"><p><strong>After reconstitution with '+ml+' mL:</strong></p>'+
+        '<p>Concentration: <span class="highlight">'+(pml/100).toFixed(2)+' '+du+' per unit</span></p>'+
+        (dose>0?'<p>For '+dose+' '+du+': draw <span class="highlight">'+mpd.toFixed(3)+' mL</span></p>'+
+        '<p>\u2192 U-100: <span class="highlight-green">'+mlToUnits(mpd,'U100').toFixed(1)+' units</span></p>'+
+        '<p>\u2192 U-50: <span class="highlight-purple">'+mlToUnits(mpd,'U50').toFixed(1)+' units</span></p>'+
+        '<p>Doses per vial: <span class="highlight">'+doses+'</span></p>':'')+
+        '</div>';
+});
+
+document.getElementById('reconstitute-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var id=document.getElementById('recon-peptide-id').value;
+    var p=appData.peptides.find(function(x){return x.id===id;}); if (!p) return;
+    var total=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    p.reconstituted={waterType:document.getElementById('water-type').value,waterMl:parseFloat(document.getElementById('water-ml').value),remainingUnits:total,reconstitutedAt:new Date().toISOString()};
+    await dbPut('peptides',p); renderSupply(); closeModal('reconstitute-modal');
+});
+
+async function finishVial(id) {
+    var p=appData.peptides.find(function(x){return x.id===id;});
+    if (!p||!confirm('Mark this '+p.name+' vial as finished?')) return;
+    p.reconstituted=null; p.vialsOnHand=Math.max(0,p.vialsOnHand-1);
+    await dbPut('peptides',p); renderSupply(); updateDoseDropdown();
+}
+
+// ============================================================
+// EDIT
+// ============================================================
+function openEdit(id) {
+    var p=appData.peptides.find(function(x){return x.id===id;}); if (!p) return;
+    document.getElementById('edit-id').value=id;
+    document.getElementById('edit-vials').value=p.vialsOnHand;
+    document.getElementById('edit-dose').value=p.dailyDose;
+    document.getElementById('edit-dpw').value=p.dosesPerWeek;
+    document.getElementById('edit-cycle-dur').value=p.cycleDuration||'';
+    document.getElementById('edit-syringe').value=p.syringeType||'U100';
+    document.getElementById('edit-reorder').value=p.reorderThreshold||5;
+    document.getElementById('edit-dose-label').textContent='Your Dose ('+doseUnit(p)+')';
+    editSelectedColor=p.color||PEPTIDE_COLORS[0];
+    buildColorPicker('edit-color-picker',function(c){editSelectedColor=c;},editSelectedColor);
+    document.getElementById('edit-modal').classList.add('active');
+}
+
+document.getElementById('edit-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var id=document.getElementById('edit-id').value;
+    var p=appData.peptides.find(function(x){return x.id===id;}); if (!p) return;
+    p.vialsOnHand=parseInt(document.getElementById('edit-vials').value);
+    p.dailyDose=parseFloat(document.getElementById('edit-dose').value)||0;
+    p.dosesPerWeek=parseInt(document.getElementById('edit-dpw').value)||7;
+    p.cycleDuration=parseInt(document.getElementById('edit-cycle-dur').value)||0;
+    p.syringeType=document.getElementById('edit-syringe').value;
+    p.reorderThreshold=parseInt(document.getElementById('edit-reorder').value)||5;
+    p.color=editSelectedColor;
+    await dbPut('peptides',p); renderSupply(); updateDoseDropdown(); checkLowStockNotification(); closeModal('edit-modal');
+});
+
+async function deletePeptide(id) {
+    var p=appData.peptides.find(function(x){return x.id===id;});
+    if (!p||!confirm('Delete '+p.name+'?')) return;
+    appData.peptides=appData.peptides.filter(function(x){return x.id!==id;});
+    appData.cycles=(appData.cycles||[]).filter(function(c){return c.peptideId!==id;});
+    await dbDelete('peptides',id);
+    var cyclesToDel=appData.cycles.filter(function(c){return c.peptideId===id;});
+    for (var i=0;i<cyclesToDel.length;i++) await dbDelete('cycles',cyclesToDel[i].id);
+    renderSupply(); updateDoseDropdown(); updateReorderBadge();
+}
+
+// ============================================================
+// CYCLES
+// ============================================================
+function startCycle(peptideId, date) {
+    if (!appData.cycles) appData.cycles=[];
+    if (appData.cycles.find(function(c){return c.peptideId===peptideId&&c.status==='active';})) return;
+    var p=appData.peptides.find(function(x){return x.id===peptideId;}); if (!p) return;
+    var ped=null;
+    if (p.cycleDuration) { var d=new Date(date+'T00:00:00'); d.setDate(d.getDate()+p.cycleDuration*7); ped=d.toISOString().split('T')[0]; }
+    var cycle={id:genId(),peptideId:peptideId,peptideName:p.name,color:p.color||'var(--accent)',startDate:date,endDate:null,plannedDuration:p.cycleDuration||0,plannedEndDate:ped,status:'active',createdAt:new Date().toISOString()};
+    appData.cycles.push(cycle);
+    dbPut('cycles',cycle);
+}
+
+async function endCycle(cycleId) {
+    var cycle=(appData.cycles||[]).find(function(c){return c.id===cycleId;}); if (!cycle) return;
+    cycle.status='completed'; cycle.endDate=new Date().toISOString().split('T')[0];
+    var p=appData.peptides.find(function(x){return x.id===cycle.peptideId;});
+    if (p&&p.dailyDose&&p.mgPerVial) {
+        var days=Math.ceil((new Date(cycle.endDate+'T00:00:00')-new Date(cycle.startDate+'T00:00:00'))/86400000);
+        var tu=p.dailyDose*(p.dosesPerWeek/7)*days, vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+        p.vialsOnHand=Math.max(0,p.vialsOnHand-Math.round(tu/vc));
+        await dbPut('peptides',p);
+    }
+    await dbPut('cycles',cycle);
+    renderSupply(); renderCycles(); closeModal('cycle-modal');
+}
+
+function getCycleDoses(cycleId) {
+    var cycle=(appData.cycles||[]).find(function(c){return c.id===cycleId;}); if (!cycle) return [];
+    return (appData.doses||[]).filter(function(d){return d.peptideId===cycle.peptideId&&d.date>=cycle.startDate&&(!cycle.endDate||d.date<=cycle.endDate);});
+}
+
+var ganttWindowStart=null, GANTT_WEEKS=26;
+
+function renderCycles() {
+    renderGantt(appData.cycles||[]);
+    renderCycleDetails(appData.cycles||[]);
+}
+
+function renderGantt(cycles) {
+    var wrapper=document.getElementById('gantt-wrapper'), rl=document.getElementById('gantt-range-label');
+    if (!cycles.length){wrapper.innerHTML='<div class="empty-state"><p>No cycles yet.</p></div>';rl.textContent='';return;}
+    if (!ganttWindowStart){
+        var earliest=cycles.reduce(function(m,c){return c.startDate<m?c.startDate:m;},cycles[0].startDate);
+        var d=new Date(earliest+'T00:00:00'); d.setDate(d.getDate()-14); ganttWindowStart=d;
+    }
+    var we=new Date(ganttWindowStart.getTime()+GANTT_WEEKS*7*86400000), tm=GANTT_WEEKS*7*86400000;
+    var today=new Date(); today.setHours(0,0,0,0);
+    rl.textContent=fmtDateShort(ganttWindowStart)+' \u2014 '+fmtDateShort(we);
+    var mm=[]; var cur=new Date(ganttWindowStart.getFullYear(),ganttWindowStart.getMonth(),1);
+    while(cur<we){var pct=((cur-ganttWindowStart)/tm)*100;if(pct>=0&&pct<=100)mm.push({label:cur.toLocaleDateString('en-US',{month:'short',year:'2-digit'}),pct:pct});cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);}
+    var mh=mm.map(function(m){return '<div class="gantt-month-label" style="left:'+m.pct.toFixed(1)+'%;">'+m.label+'</div>';}).join('');
+    var gl=mm.map(function(m){return '<div class="gantt-grid-line" style="left:'+m.pct.toFixed(1)+'%;"></div>';}).join('');
+    var tp=((today-ganttWindowStart)/tm)*100, tl=(tp>=0&&tp<=100)?'<div class="gantt-today-line" style="left:'+tp.toFixed(1)+'%;"></div>':'';
+    var bp={};
+    cycles.forEach(function(c){if(!bp[c.peptideId])bp[c.peptideId]=[];bp[c.peptideId].push(c);});
+    var rows='';
+    Object.keys(bp).forEach(function(pid){
+        var pcs=bp[pid], pName=pcs[0].peptideName;
+        var bars=pcs.map(function(c){
+            var sd=new Date(c.startDate+'T00:00:00');
+            var ed=c.endDate?new Date(c.endDate+'T00:00:00'):c.plannedEndDate?new Date(c.plannedEndDate+'T00:00:00'):new Date(today.getTime()+7*86400000);
+            var lp=((sd-ganttWindowStart)/tm)*100, wp=((ed-sd)/tm)*100;
+            if(lp>100||lp+wp<0)return'';
+            var cl=Math.max(0,lp), cw=Math.min(100-cl,wp-(cl-lp));
+            var cnt=getCycleDoses(c.id).length;
+            var barColor=c.color||'var(--accent)';
+            var cls=c.status==='active'?'active':'completed';
+            return '<div class="gantt-bar '+cls+'" style="left:'+cl.toFixed(1)+'%;width:'+Math.max(0.5,cw).toFixed(1)+'%;background:'+barColor+';" title="'+pName+': '+c.startDate+' - '+(c.endDate||c.plannedEndDate||'ongoing')+' ('+cnt+' doses)" onclick="openCycleModal(\''+c.id+'\')">'+(c.status==='active'?'\u25cf ':'')+cnt+' doses</div>';
+        }).join('');
+        rows+='<div class="gantt-row"><div class="gantt-row-label"><strong>'+pName+'</strong><small>'+pcs.length+' cycle'+(pcs.length>1?'s':'')+'</small></div><div class="gantt-track">'+gl+tl+bars+'</div></div>';
+    });
+    wrapper.innerHTML='<div class="gantt-header"><div class="gantt-label-col">Peptide</div><div class="gantt-months">'+mh+'</div></div>'+rows;
+}
+
+function renderCycleDetails(cycles) {
+    var container=document.getElementById('cycle-details-list');
+    if (!cycles.length){container.innerHTML='<div class="empty-state"><p>No cycles yet.</p></div>';return;}
+    var sorted=cycles.slice().sort(function(a,b){return b.startDate.localeCompare(a.startDate);});
+    var html='';
+    sorted.forEach(function(c){
+        var doses=getCycleDoses(c.id), p=appData.peptides.find(function(x){return x.id===c.peptideId;});
+        var start=new Date(c.startDate+'T00:00:00'), today=new Date(); today.setHours(0,0,0,0);
+        var endD=c.endDate?new Date(c.endDate+'T00:00:00'):today;
+        var elapsed=Math.ceil((endD-start)/86400000);
+        var pct=c.plannedDuration?Math.min(100,(elapsed/(c.plannedDuration*7))*100):null;
+        var totalU=doses.reduce(function(s,d){return s+d.amount;},0);
+        var du=p?doseUnit(p):'mcg';
+        var sColor=c.status==='active'?'var(--success)':'var(--accent)';
+        var barColor=c.color||'var(--success)';
+        var progHtml=pct!==null?
+            '<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">Week '+(elapsed/7).toFixed(1)+' of '+c.plannedDuration+' ('+pct.toFixed(0)+'% complete)</div>'+
+            '<div class="cycle-progress-bar"><div class="cycle-progress-fill" style="width:'+pct+'%;background:'+barColor+';"></div></div>':
+            '<div style="font-size:0.82rem;color:var(--text-secondary);">Week '+(elapsed/7).toFixed(1)+' elapsed</div>';
+        var vc=p?(isIU(p)?p.mgPerVial:p.mgPerVial*1000):1000;
+        var vialsUsed=p?'<div class="cycle-stat"><div class="cycle-stat-value">'+(totalU/vc).toFixed(2)+'</div><div class="cycle-stat-label">Vials Used</div></div>':'';
+        var projHtml='';
+        if (p&&c.status==='active') {
+            var proj=calcPostCycleProjection(p,c);
+            if (proj) {
+                var rw=proj.postVials<=p.reorderThreshold?' \u2014 <span style="color:var(--warning);">\u26a0\ufe0f Reorder</span>':'';
+                projHtml='<div class="supply-projection">\uD83D\uDCCA Post-Cycle: ~'+proj.postVials+' vials remaining'+rw+'<br><small style="color:var(--text-secondary);">'+proj.daysRemaining+' days remaining</small></div>';
+            }
+        }
+        var endBtn=c.status==='active'?'<div style="margin-top:12px;"><button class="btn-danger btn-small" onclick="openCycleModal(\''+c.id+'\')">End Cycle</button></div>':'';
+        html+='<div class="cycle-detail-card">'+
+            '<div class="cycle-detail-header">'+
+            '<div><strong style="font-size:1.05rem;">'+c.peptideName+'</strong><span class="status-badge" style="background:rgba(255,255,255,0.07);color:'+sColor+';margin-left:8px;">'+c.status.toUpperCase()+'</span></div>'+
+            '<div style="font-size:0.82rem;color:var(--text-secondary);">'+fmtDate(c.startDate)+' \u2192 '+(c.endDate?fmtDate(c.endDate):c.plannedEndDate?fmtDate(c.plannedEndDate)+' (planned)':'Ongoing')+'</div></div>'+
+            progHtml+
+            '<div class="cycle-stats">'+
+            '<div class="cycle-stat"><div class="cycle-stat-value">'+doses.length+'</div><div class="cycle-stat-label">Doses</div></div>'+
+            '<div class="cycle-stat"><div class="cycle-stat-value">'+elapsed+'</div><div class="cycle-stat-label">Days</div></div>'+
+            '<div class="cycle-stat"><div class="cycle-stat-value">'+totalU.toFixed(0)+'</div><div class="cycle-stat-label">Total '+du+'</div></div>'+
+            vialsUsed+'</div>'+projHtml+endBtn+'</div>';
+    });
+    container.innerHTML=html;
+}
+
+function openCycleModal(cycleId) {
+    var cycle=(appData.cycles||[]).find(function(c){return c.id===cycleId;}); if (!cycle) return;
+    var endBtn=document.getElementById('cycle-end-btn');
+    document.getElementById('cycle-modal-content').innerHTML='<p><strong>'+cycle.peptideName+'</strong></p><p style="color:var(--text-secondary);font-size:0.88rem;margin-top:6px;">Started: '+fmtDate(cycle.startDate)+'<br>Status: '+cycle.status+'<br>Doses: '+getCycleDoses(cycleId).length+'</p>';
+    endBtn.style.display=cycle.status==='active'?'inline-block':'none';
+    endBtn.onclick=function(){if(confirm('End '+cycle.peptideName+' cycle?'))endCycle(cycleId);};
+    document.getElementById('cycle-modal').classList.add('active');
+}
+
+document.getElementById('gantt-scroll-left').addEventListener('click',function(){if(ganttWindowStart){ganttWindowStart=new Date(ganttWindowStart.getTime()-28*86400000);renderGantt(appData.cycles||[]);}});
+document.getElementById('gantt-scroll-right').addEventListener('click',function(){if(ganttWindowStart){ganttWindowStart=new Date(ganttWindowStart.getTime()+28*86400000);renderGantt(appData.cycles||[]);}});
+
+// ============================================================
+// DOSE LOG
+// ============================================================
+function updateDoseDropdown() {
+    var sel=document.getElementById('dose-peptide'), cur=sel.value;
+    sel.innerHTML='<option value="">Select from your supply...</option>'+(appData.peptides||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+' ('+p.mgPerVial+p.unit+')'+(p.reconstituted?' \u2713':'')+'</option>';}).join('');
+    if ((appData.peptides||[]).find(function(x){return x.id===cur;})) sel.value=cur;
+}
+
+document.getElementById('dose-peptide').addEventListener('change',function(){
+    var id=this.value, ref=document.getElementById('quick-reference'), cnt=document.getElementById('quick-reference-content');
+    if (!id){ref.style.display='none';return;}
+    var p=appData.peptides.find(function(x){return x.id===id;}); if (!p){ref.style.display='none';return;}
+    var du=doseUnit(p);
+    document.getElementById('log-dose-label').textContent='Dose ('+du+') *';
+    if (p.dailyDose) document.getElementById('dose-amount').value=p.dailyDose;
+    if (p.reconstituted){
+        var ri=calcReconInfo(p);
+        var lb=p.syringeType==='U50'?'U-50':'U-100', u=p.syringeType==='U50'?ri.syringeU50:ri.syringeU100;
+        cnt.innerHTML='<div class="dose-calc"><p><strong>'+p.name+'</strong> \u2014 Active vial</p>'+
+            '<p>Draw <span class="highlight">'+ri.mlPerDose.toFixed(3)+' mL</span> for '+p.dailyDose+' '+du+'</p>'+
+            '<p>'+lb+': <span class="highlight">'+u.toFixed(1)+' units</span> &nbsp;|&nbsp; U-100: '+ri.syringeU100.toFixed(1)+' | U-50: '+ri.syringeU50.toFixed(1)+'</p>'+
+            '<p>Remaining: '+ri.remainingUnits.toFixed(1)+' '+du+' ('+ri.dosesRemaining+' doses)</p></div>';
+    } else {
+        cnt.innerHTML='<div class="dose-calc" style="border:1px solid var(--warning);background:rgba(245,158,11,0.08);"><p><strong>\u26a0\ufe0f '+p.name+' not reconstituted.</strong></p></div>';
+    }
+    ref.style.display='block';
+});
+
+document.getElementById('dose-date').valueAsDate=new Date();
+
+document.getElementById('dose-form').addEventListener('submit',async function(e){
+    e.preventDefault();
+    var id=document.getElementById('dose-peptide').value;
+    var p=appData.peptides.find(function(x){return x.id===id;}); if (!p){alert('Select a peptide.');return;}
+    var amount=parseFloat(document.getElementById('dose-amount').value);
+    var doseDate=document.getElementById('dose-date').value;
+    if (p.reconstituted){
+        var totalUnits=(p.reconstituted.remainingUnits!==undefined)?p.reconstituted.remainingUnits:(isIU(p)?p.mgPerVial:p.mgPerVial*1000);
+        p.reconstituted.remainingUnits=totalUnits-amount;
+        if (p.reconstituted.remainingUnits<=0){alert(p.name+' vial is now empty.');p.reconstituted=null;p.vialsOnHand=Math.max(0,p.vialsOnHand-1);}
+        await dbPut('peptides',p);
+    }
+    var hasActive=(appData.cycles||[]).some(function(c){return c.peptideId===id&&c.status==='active';});
+    if (!hasActive&&p.cycleDuration) startCycle(id,doseDate);
+    var dose={id:genId(),peptideId:id,peptideName:p.name,date:doseDate,time:document.getElementById('dose-time').value||null,amount:amount,unit:doseUnit(p),site:document.getElementById('injection-site').value||null,notes:document.getElementById('dose-notes').value.trim()||null,loggedAt:new Date().toISOString()};
+    appData.doses.push(dose);
+    await dbPut('doses',dose);
+    renderSupply(); renderHistory(); renderSiteRotation();
+    document.getElementById('dose-peptide').value='';
+    document.getElementById('dose-amount').value='';
+    document.getElementById('injection-site').value='';
+    document.getElementById('dose-notes').value='';
+    document.getElementById('log-dose-label').textContent='Dose (mcg) *';
+    document.getElementById('quick-reference').style.display='none';
+    updateReorderBadge(); checkLowStockNotification();
+});
+
+// ============================================================
+// HISTORY + CSV
+// ============================================================
+function renderHistory(filter){
+    filter=filter||document.getElementById('history-search').value||'';
+    var tbody=document.getElementById('history-table');
+    var doses=(appData.doses||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+    if (filter) doses=doses.filter(function(d){return d.peptideName.toLowerCase().indexOf(filter.toLowerCase())>-1;});
+    if (!doses.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr>';return;}
+    tbody.innerHTML=doses.map(function(d){
+        return '<tr><td>'+fmtDate(d.date)+'</td><td>'+(d.time||'-')+'</td><td>'+d.peptideName+'</td>'+
+               '<td>'+d.amount+' '+(d.unit||'mcg')+'</td><td>'+(d.site||'-')+'</td>'+
+               '<td style="font-size:0.8rem;color:var(--text-secondary);max-width:160px;">'+(d.notes||'')+'</td>'+
+               '<td><button class="btn-danger btn-small" onclick="deleteDose(\''+d.id+'\')">🗑️</button></td></tr>';
+    }).join('');
+}
+
+document.getElementById('history-search').addEventListener('input',function(){renderHistory(this.value);});
+
+async function deleteDose(id){
+    if (!confirm('Delete this dose?')) return;
+    appData.doses=appData.doses.filter(function(d){return d.id!==id;});
+    await dbDelete('doses',id); renderHistory();
+}
+
+function exportCSV(){
+    if (!appData.doses||!appData.doses.length){alert('No doses to export.');return;}
+    var rows=[['Date','Time','Peptide','Dose','Unit','Site','Notes']];
+    appData.doses.slice().sort(function(a,b){return a.date.localeCompare(b.date);}).forEach(function(d){
+        rows.push([d.date,d.time||'',d.peptideName,d.amount,d.unit||'mcg',d.site||'',(d.notes||'').replace(/,/g,' ')]);
+    });
+    dlCSV(rows,'peptide-log');
+}
+
+function dlCSV(rows,name){
+    var blob=new Blob([rows.map(function(r){return r.join(',');}).join('\n')],{type:'text/csv'});
+    var url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=name+'-'+new Date().toISOString().split('T')[0]+'.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// CALENDAR
+// ============================================================
+var calDate=new Date();
+
+function renderCalendar(){
+    var grid=document.getElementById('calendar-grid'), header=document.getElementById('calendar-month-year');
+    var year=calDate.getFullYear(), month=calDate.getMonth();
+    header.textContent=new Date(year,month).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    var fd=new Date(year,month,1).getDay(), dim=new Date(year,month+1,0).getDate();
+    var today=new Date(); today.setHours(0,0,0,0);
+    var pl=new Date(year,month,0).getDate();
+    var html=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(function(d){return '<div class="cal-day-header">'+d+'</div>';}).join('');
+    for (var i=fd-1;i>=0;i--) html+='<div class="cal-day other-month"><div class="cal-day-num">'+(pl-i)+'</div></div>';
+    for (var day=1;day<=dim;day++){
+        var ds=year+'-'+String(month+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        var isT=new Date(year,month,day).getTime()===today.getTime();
+        var dd=(appData.doses||[]).filter(function(d){return d.date===ds;});
+        var doseHtml=dd.map(function(d){
+            var p=appData.peptides.find(function(x){return x.id===d.peptideId;});
+            var bg=p?getPeptideColor(p):'var(--accent)';
+            return '<div class="cal-dose" style="background:'+bg+';" title="'+d.peptideName+': '+d.amount+(d.unit||'mcg')+'">'+d.peptideName+'</div>';
+        }).join('');
+        html+='<div class="cal-day'+(isT?' today':'')+'"><div class="cal-day-num">'+day+'</div>'+doseHtml+'</div>';
+    }
+    var rem=42-(fd+dim);
+    for (var j=1;j<=rem;j++) html+='<div class="cal-day other-month"><div class="cal-day-num">'+j+'</div></div>';
+    grid.innerHTML=html;
+}
+
+document.getElementById('prev-month').addEventListener('click',function(){calDate.setMonth(calDate.getMonth()-1);renderCalendar();});
+document.getElementById('next-month').addEventListener('click',function(){calDate.setMonth(calDate.getMonth()+1);renderCalendar();});
+document.getElementById('today-btn').addEventListener('click',function(){calDate=new Date();renderCalendar();});
+
+// ============================================================
+// CATALOG TAB
+// ============================================================
+function renderCatalog(filter){
+    filter=filter||'';
+    var tbody=document.getElementById('catalog-tbody');
+    var items=filter?CATALOG.filter(function(p){return p.name.toLowerCase().indexOf(filter.toLowerCase())>-1;}):CATALOG;
+    tbody.innerHTML=items.map(function(p){
+        return '<tr><td><strong>'+p.name+'</strong>'+(p.note?'<br><small style="color:var(--text-secondary);">'+p.note+'</small>':'')+
+               '</td><td>'+p.mgPerVial+' '+(p.unit||'mg')+'</td><td>'+p.vialsPerKit+'</td><td>$'+p.price+'</td>'+
+               '<td style="font-size:0.78rem;color:var(--text-secondary);max-width:260px;">'+getDesc(p.name).substring(0,100)+'...</td></tr>';
+    }).join('');
+}
+
+document.getElementById('catalog-search').addEventListener('input',function(){renderCatalog(this.value);});
+
+// ============================================================
+// PROTOCOL TEMPLATES
+// ============================================================
+function openCreateProtocolModal(){
+    document.getElementById('proto-name').value='';
+    var list=document.getElementById('proto-peptide-list');
+    if (!appData.peptides.length){list.innerHTML='<p style="color:var(--text-secondary);">No peptides in supply yet.</p>';document.getElementById('protocol-modal').classList.add('active');return;}
+    list.innerHTML=appData.peptides.map(function(p){
+        return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">'+
+            '<input type="checkbox" value="'+p.id+'" style="width:16px;height:16px;accent-color:var(--accent);">'+
+            '<span class="color-dot" style="background:'+(p.color||'var(--accent)')+'"></span>'+
+            '<span>'+p.name+' — '+p.mgPerVial+p.unit+'/vial, '+p.dailyDose+' '+(isIU(p)?'IU':'mcg')+' × '+p.dosesPerWeek+'/wk</span></label>';
+    }).join('');
+    document.getElementById('protocol-modal').classList.add('active');
+}
+
+async function saveProtocolTemplate(){
+    var name=document.getElementById('proto-name').value.trim();
+    if (!name){alert('Enter a template name.');return;}
+    var checked=Array.from(document.getElementById('proto-peptide-list').querySelectorAll('input:checked')).map(function(c){return c.value;});
+    if (!checked.length){alert('Select at least one peptide.');return;}
+    var peptides=checked.map(function(id){
+        var p=appData.peptides.find(function(x){return x.id===id;});
+        return {name:p.name,mgPerVial:p.mgPerVial,unit:p.unit,vialsPerKit:p.vialsPerKit,costPerKit:p.costPerKit,dailyDose:p.dailyDose,dosesPerWeek:p.dosesPerWeek,cycleDuration:p.cycleDuration,syringeType:p.syringeType,color:p.color};
+    });
+    var proto={id:genId(),name:name,peptides:peptides,createdAt:new Date().toISOString()};
+    appData.protocols.push(proto);
+    await dbPut('protocols',proto);
+    renderProtocolTemplatesList();
+    closeModal('protocol-modal');
+}
+
+function renderProtocolTemplatesList(){
+    var container=document.getElementById('protocol-templates-list');
+    if (!appData.protocols.length){container.innerHTML='<p style="color:var(--text-secondary);font-size:0.88rem;">No protocol templates yet.</p>';return;}
+    container.innerHTML=appData.protocols.map(function(proto){
+        return '<div class="template-card">'+
+            '<div><strong>'+proto.name+'</strong><div style="font-size:0.82rem;color:var(--text-secondary);margin-top:3px;">'+
+            proto.peptides.map(function(p){return p.name;}).join(', ')+'</div></div>'+
+            '<div style="display:flex;gap:8px;">'+
+            '<button class="btn-primary btn-small" onclick="applyProtocolTemplate(\''+proto.id+'\')">Apply to Supply</button>'+
+            '<button class="btn-danger btn-small" onclick="deleteProtocol(\''+proto.id+'\')">🗑️</button>'+
+            '</div></div>';
+    }).join('');
+}
+
+async function applyProtocolTemplate(protoId){
+    var proto=appData.protocols.find(function(x){return x.id===protoId;});
+    if (!proto||!confirm('Add all peptides from "'+proto.name+'" to your supply? You can set quantities after.')) return;
+    for (var i=0;i<proto.peptides.length;i++){
+        var pp=proto.peptides[i];
+        var p={id:genId(),name:pp.name,mgPerVial:pp.mgPerVial,unit:pp.unit||'mg',vialsPerKit:pp.vialsPerKit,
+               costPerKit:pp.costPerKit,vialsOnHand:pp.vialsPerKit,
+               dailyDose:pp.dailyDose||0,dosesPerWeek:pp.dosesPerWeek||7,
+               cycleDuration:pp.cycleDuration||0,syringeType:pp.syringeType||'U100',
+               reorderThreshold:5,description:getDesc(pp.name),note:null,color:pp.color||PEPTIDE_COLORS[0],
+               reconstituted:null,createdAt:new Date().toISOString()};
+        appData.peptides.push(p);
+        await dbPut('peptides',p);
+    }
+    renderSupply(); updateDoseDropdown(); updateReorderBadge();
+    alert('Protocol applied! '+proto.peptides.length+' peptides added. Edit each card to set your actual quantities.');
+}
+
+async function deleteProtocol(id){
+    if (!confirm('Delete this protocol template?')) return;
+    appData.protocols=appData.protocols.filter(function(x){return x.id!==id;});
+    await dbDelete('protocols',id); renderProtocolTemplatesList();
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function closeModal(id){document.getElementById(id).classList.remove('active');}
+document.querySelectorAll('.modal-overlay').forEach(function(m){
+    m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('active');});
+});
+
+// ============================================================
+// REORDER MODULE
+// ============================================================
+function updateReorderBadge(){
+    var btn=document.getElementById('reorder-tab-btn');
+    var low=appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;}).length;
+    var existing=btn.querySelector('.reorder-badge');
+    if (existing) existing.remove();
+    if (low>0){var badge=document.createElement('span');badge.className='reorder-badge';badge.textContent=low;btn.appendChild(badge);}
+}
+
+function getActiveOrder(){return appData.orders.find(function(o){return o.id===activeOrderId;})||null;}
+
+function newOrder(){
+    var current=getActiveOrder();
+    if (current&&current.status==='saved'){
+        if (!confirm('You have an unsaved order open ("'+current.name+'"). Save it and create a new one?')) return;
+        saveActiveOrder();
+    }
+    var order={id:genId(),name:'Order '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),status:'saved',supplier:'',notes:'',items:[],createdAt:new Date().toISOString(),placedAt:null,receivedAt:null};
+    appData.orders.unshift(order);
+    dbPut('orders',order);
+    openOrder(order.id);
+}
+
+function openOrder(orderId){
+    activeOrderId=orderId;
+    var order=getActiveOrder(); if (!order) return;
+    var isEditable=order.status==='saved';
+    document.getElementById('active-order-card').style.display='block';
+    document.getElementById('no-order-prompt').style.display='none';
+    document.getElementById('add-catalog-card').style.display=isEditable?'block':'none';
+    document.getElementById('order-name-input').value=order.name;
+    document.getElementById('order-name-input').disabled=!isEditable;
+    document.getElementById('order-supplier').value=order.supplier||'';
+    document.getElementById('order-supplier').disabled=!isEditable;
+    document.getElementById('order-notes').value=order.notes||'';
+    document.getElementById('order-notes').disabled=!isEditable;
+    var badge=document.getElementById('order-status-badge');
+    badge.textContent=order.status.toUpperCase();
+    badge.className='status-badge order-status-'+order.status;
+    document.getElementById('btn-mark-placed').style.display=order.status==='saved'?'inline-block':'none';
+    document.getElementById('btn-mark-received').style.display=order.status==='placed'?'inline-block':'none';
+    renderCart(); if (isEditable) renderReorderCatalog(); renderOrderHistory();
+}
+
+function closeActiveOrder(){
+    activeOrderId=null;
+    document.getElementById('active-order-card').style.display='none';
+    document.getElementById('add-catalog-card').style.display='none';
+    document.getElementById('no-order-prompt').style.display='block';
+    renderOrderHistory();
+}
+
+function saveActiveOrder(){
+    var order=getActiveOrder(); if (!order) return;
+    order.name=document.getElementById('order-name-input').value.trim()||order.name;
+    order.supplier=document.getElementById('order-supplier').value.trim();
+    order.notes=document.getElementById('order-notes').value.trim();
+    dbPut('orders',order); renderOrderHistory();
+}
+
+function markOrderPlaced(){
+    var order=getActiveOrder();
+    if (!order||order.status!=='saved') return;
+    if (!order.items.length){alert('Add items to the order first.');return;}
+    if (!confirm('Mark "'+order.name+'" as placed? Items cannot be edited after this.')) return;
+    saveActiveOrder();
+    order.status='placed'; order.placedAt=new Date().toISOString();
+    dbPut('orders',order); openOrder(order.id); renderOrderHistory();
+}
+
+async function markOrderReceived(){
+    var order=getActiveOrder();
+    if (!order||order.status!=='placed') return;
+    if (!confirm('Mark "'+order.name+'" as received? All items will be added to your supply.')) return;
+    order.status='received'; order.receivedAt=new Date().toISOString();
+    var added=0, updated=0;
+    for (var i=0;i<order.items.length;i++){
+        var item=order.items[i];
+        var existing=appData.peptides.find(function(p){return p.name===item.name&&p.mgPerVial===item.mgPerVial&&(p.unit||'mg')===(item.unit||'mg');});
+        if (existing){existing.vialsOnHand+=item.qty*item.vialsPerKit;await dbPut('peptides',existing);updated++;}
+        else{var np={id:genId(),name:item.name,mgPerVial:item.mgPerVial,unit:item.unit||'mg',vialsPerKit:item.vialsPerKit,costPerKit:item.price,vialsOnHand:item.qty*item.vialsPerKit,dailyDose:0,dosesPerWeek:7,cycleDuration:0,syringeType:'U100',reorderThreshold:5,description:getDesc(item.name),note:item.note||null,color:PEPTIDE_COLORS[0],reconstituted:null,createdAt:new Date().toISOString()};appData.peptides.push(np);await dbPut('peptides',np);added++;}
+    }
+    await dbPut('orders',order);
+    renderSupply(); updateDoseDropdown(); updateReorderBadge(); checkLowStockNotification();
+    openOrder(order.id); renderOrderHistory();
+    alert('Received! '+updated+' updated, '+added+' new items added to supply.');
+}
+
+function deleteActiveOrder(){
+    var order=getActiveOrder(); if (!order) return;
+    if (!confirm('Delete "'+order.name+'"?')) return;
+    appData.orders=appData.orders.filter(function(o){return o.id!==activeOrderId;});
+    dbDelete('orders',activeOrderId);
+    activeOrderId=null;
+    document.getElementById('active-order-card').style.display='none';
+    document.getElementById('add-catalog-card').style.display='none';
+    document.getElementById('no-order-prompt').style.display='block';
+    renderOrderHistory();
+}
+
+// ---- Cart ----
+function addToCart(catItem, qty){
+    var order=getActiveOrder();
+    if (!order||order.status!=='saved'){alert('Open a saved order first.');return;}
+    qty=parseInt(qty)||1;
+    var existing=order.items.find(function(i){return i.name===catItem.name&&i.mgPerVial===catItem.mgPerVial;});
+    if (existing){existing.qty+=qty;}
+    else{order.items.push({id:genId(),name:catItem.name,mgPerVial:catItem.mgPerVial,unit:catItem.unit||'mg',vialsPerKit:catItem.vialsPerKit,price:catItem.price,note:catItem.note||null,supplier:order.supplier||'',qty:qty});}
+    dbPut('orders',order); renderCart(); renderReorderCatalog();
+}
+
+function removeFromCart(itemId){
+    var order=getActiveOrder(); if (!order) return;
+    order.items=order.items.filter(function(i){return i.id!==itemId;});
+    dbPut('orders',order); renderCart(); renderReorderCatalog();
+}
+
+function updateCartQty(itemId, val){
+    var order=getActiveOrder(); if (!order) return;
+    var item=order.items.find(function(i){return i.id===itemId;}); if (!item) return;
+    var qty=parseInt(val); if (qty<1||isNaN(qty)) return;
+    item.qty=qty; dbPut('orders',order); renderCartTotals();
+}
+
+function updateCartSupplier(itemId, val){
+    var order=getActiveOrder(); if (!order) return;
+    var item=order.items.find(function(i){return i.id===itemId;});
+    if (item){item.supplier=val;dbPut('orders',order);}
+}
+
+function renderCart(){
+    var order=getActiveOrder(), tbody=document.getElementById('cart-tbody'), totals=document.getElementById('cart-totals');
+    if (!order||!order.items.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-secondary);">Cart is empty \u2014 add items below</td></tr>';totals.style.display='none';return;}
+    var isEditable=order.status==='saved';
+    var html='';
+    order.items.forEach(function(item){
+        var lt=item.qty*item.price, cpw=calcItemCostPerWeek(item), cpc=calcItemCostPerCycle(item);
+        var qtyCell=isEditable?'<input type="number" value="'+item.qty+'" min="1" style="width:58px;padding:4px 6px;font-size:0.85rem;text-align:center;" onchange="updateCartQty(\''+item.id+'\',this.value)">':item.qty;
+        var supCell=isEditable?'<input type="text" value="'+(item.supplier||'')+'" placeholder="Supplier" style="width:120px;padding:4px 8px;font-size:0.82rem;" onchange="updateCartSupplier(\''+item.id+'\',this.value)">':item.supplier||'—';
+        var actionCell=isEditable?'<button class="btn-danger btn-small" onclick="removeFromCart(\''+item.id+'\')">✕</button>':'—';
+        html+='<tr><td><strong>'+item.name+'</strong>'+(item.note?'<br><small style="color:var(--text-secondary);">'+item.note+'</small>':'')+
+              '</td><td>'+item.mgPerVial+' '+(item.unit||'mg')+' \xd7 '+item.vialsPerKit+
+              '</td><td>'+supCell+'</td><td>'+qtyCell+
+              '</td><td>$'+item.price+'</td><td><strong>$'+lt.toFixed(2)+'</strong></td>'+
+              '<td>'+(cpw!==null?'<span style="color:var(--success);font-weight:600;">$'+cpw+'/wk</span>':'<span style="color:var(--text-secondary);">—</span>')+'</td>'+
+              '<td>'+(cpc!==null?'<span style="color:var(--accent);font-weight:600;">$'+cpc+'/cycle</span>':'<span style="color:var(--text-secondary);">—</span>')+'</td>'+
+              '<td>'+actionCell+'</td></tr>';
+    });
+    tbody.innerHTML=html;
+    renderCartTotals();
+}
+
+function renderCartTotals(){
+    var order=getActiveOrder();
+    if (!order||!order.items.length){document.getElementById('cart-totals').style.display='none';return;}
+    var sub=order.items.reduce(function(s,i){return s+i.qty*i.price;},0);
+    var tv=order.items.reduce(function(s,i){return s+i.qty*i.vialsPerKit;},0);
+    var cpw=order.items.reduce(function(s,i){var c=calcItemCostPerWeek(i);return c!==null?s+c:s;},0);
+    document.getElementById('cart-line-count').textContent=order.items.length;
+    document.getElementById('cart-total-vials').textContent=tv;
+    document.getElementById('cart-order-total').textContent='$'+sub.toFixed(2);
+    document.getElementById('cart-cost-wk').textContent='$'+cpw.toFixed(2);
+    document.getElementById('cart-totals').style.display='block';
+}
+
+function calcItemCostPerWeek(item){
+    var p=appData.peptides.find(function(s){return s.name===item.name&&s.mgPerVial===item.mgPerVial;});
+    if (!p||!p.dailyDose||!p.dosesPerWeek) return null;
+    var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    return parseFloat((((p.dailyDose*p.dosesPerWeek)/vc/p.vialsPerKit)*p.costPerKit).toFixed(2));
+}
+
+function calcItemCostPerCycle(item){
+    var p=appData.peptides.find(function(s){return s.name===item.name&&s.mgPerVial===item.mgPerVial;});
+    if (!p||!p.dailyDose||!p.dosesPerWeek||!p.cycleDuration) return null;
+    var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+    return parseFloat((((p.dailyDose*p.dosesPerWeek*p.cycleDuration)/vc/p.vialsPerKit)*p.costPerKit).toFixed(2));
+}
+
+// ---- Order Templates ----
+async function saveAsTemplate(){
+    var order=getActiveOrder();
+    if (!order||!order.items.length){alert('Add items to the order before saving as a template.');return;}
+    var name=prompt('Template name:',order.name+' Template');
+    if (!name) return;
+    var tmpl={id:genId(),name:name,items:order.items.map(function(i){return {name:i.name,mgPerVial:i.mgPerVial,unit:i.unit,vialsPerKit:i.vialsPerKit,price:i.price,note:i.note,supplier:i.supplier,qty:i.qty};}),createdAt:new Date().toISOString()};
+    appData.templates.push(tmpl);
+    await dbPut('templates',tmpl);
+    renderTemplatesList();
+    alert('Template "'+name+'" saved.');
+}
+
+function renderTemplatesList(){
+    var container=document.getElementById('templates-list');
+    if (!appData.templates.length){container.innerHTML='<div class="empty-state" style="padding:20px;"><p>No templates saved yet.</p></div>';return;}
+    container.innerHTML=appData.templates.map(function(t){
+        return '<div class="template-card">'+
+            '<div><strong>'+t.name+'</strong><div style="font-size:0.82rem;color:var(--text-secondary);margin-top:3px;">'+t.items.length+' items \u2014 '+t.items.map(function(i){return i.name;}).join(', ')+'</div></div>'+
+            '<div style="display:flex;gap:8px;">'+
+            '<button class="btn-primary btn-small" onclick="loadTemplate(\''+t.id+'\')">Use</button>'+
+            '<button class="btn-danger btn-small" onclick="deleteTemplate(\''+t.id+'\')">🗑️</button>'+
+            '</div></div>';
+    }).join('');
+}
+
+function showTemplateSelector(){
+    if (!appData.templates.length){alert('No templates saved yet.');return;}
+    var list=document.getElementById('template-selector-list');
+    list.innerHTML=appData.templates.map(function(t){
+        return '<div class="template-card"><div><strong>'+t.name+'</strong><div style="font-size:0.82rem;color:var(--text-secondary);">'+t.items.map(function(i){return i.name;}).join(', ')+'</div></div>'+
+            '<button class="btn-primary btn-small" onclick="loadTemplateFromSelector(\''+t.id+'\')">Use</button></div>';
+    }).join('');
+    document.getElementById('template-selector-modal').classList.add('active');
+}
+
+function loadTemplateFromSelector(tmplId){
+    closeModal('template-selector-modal');
+    loadTemplate(tmplId);
+}
+
+async function loadTemplate(tmplId){
+    var tmpl=appData.templates.find(function(t){return t.id===tmplId;});
+    if (!tmpl) return;
+    var current=getActiveOrder();
+    if (current&&current.status==='saved'){
+        if (!confirm('Create a new order from this template? Your current open order will be saved.')) return;
+        saveActiveOrder();
+    }
+    var order={id:genId(),name:tmpl.name+' ('+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})+')',status:'saved',supplier:'',notes:'',items:tmpl.items.map(function(i){return {id:genId(),name:i.name,mgPerVial:i.mgPerVial,unit:i.unit||'mg',vialsPerKit:i.vialsPerKit,price:i.price,note:i.note||null,supplier:i.supplier||'',qty:i.qty};}),createdAt:new Date().toISOString(),placedAt:null,receivedAt:null};
+    appData.orders.unshift(order);
+    await dbPut('orders',order);
+    openOrder(order.id);
+}
+
+async function deleteTemplate(id){
+    if (!confirm('Delete this template?')) return;
+    appData.templates=appData.templates.filter(function(t){return t.id!==id;});
+    await dbDelete('templates',id); renderTemplatesList();
+}
+
+function duplicateOrder(orderId){
+    var orig=appData.orders.find(function(o){return o.id===orderId;});
+    if (!orig) return;
+    var current=getActiveOrder();
+    if (current&&current.status==='saved'){
+        if (!confirm('Duplicate this order? Your current open order will be saved.')) return;
+        saveActiveOrder();
+    }
+    var order={id:genId(),name:'Copy of '+orig.name,status:'saved',supplier:orig.supplier||'',notes:orig.notes||'',items:orig.items.map(function(i){return {id:genId(),name:i.name,mgPerVial:i.mgPerVial,unit:i.unit||'mg',vialsPerKit:i.vialsPerKit,price:i.price,note:i.note||null,supplier:i.supplier||'',qty:i.qty};}),createdAt:new Date().toISOString(),placedAt:null,receivedAt:null};
+    appData.orders.unshift(order);
+    dbPut('orders',order);
+    openOrder(order.id);
+    renderOrderHistory();
+}
+
+// ---- Auto Suggest ----
+function autoSuggestToNewOrder(){
+    var low=appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;});
+    if (!low.length){alert('No peptides are below their reorder thresholds.');return;}
+    var current=getActiveOrder();
+    if (current&&current.status==='saved'){if (!confirm('Create new auto-suggest order? Current order will be saved.')) return; saveActiveOrder();}
+    var order={id:genId(),name:'Auto Reorder '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}),status:'saved',supplier:'',notes:'',items:[],createdAt:new Date().toISOString(),placedAt:null,receivedAt:null};
+    appData.orders.unshift(order);
+    dbPut('orders',order);
+    activeOrderId=order.id;
+    var added=0;
+    low.forEach(function(p){
+        var catItem=CATALOG.find(function(c){return c.name===p.name&&c.mgPerVial===p.mgPerVial;});
+        if (!catItem) return;
+        var kits=1;
+        if (p.dailyDose&&p.dosesPerWeek&&p.cycleDuration&&p.mgPerVial){
+            var cu=p.dailyDose*p.dosesPerWeek*p.cycleDuration;
+            var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;
+            kits=Math.max(1,Math.ceil(Math.ceil(cu/vc)/p.vialsPerKit));
+        }
+        order.items.push({id:genId(),name:p.name,mgPerVial:p.mgPerVial,unit:p.unit||'mg',vialsPerKit:p.vialsPerKit,price:p.costPerKit,note:p.note||null,supplier:'',qty:kits});
+        added++;
+    });
+    dbPut('orders',order);
+    openOrder(order.id);
+    alert('New order created with '+added+' suggested item'+(added!==1?'s':'')+'.');
+}
+
+// ---- Low Stock Panel ----
+function renderLowStockPanel(){
+    var panel=document.getElementById('low-stock-panel');
+    var low=appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;});
+    if (!low.length){panel.innerHTML='<div class="tip-box">\u2713 All peptides are above their reorder thresholds.</div>';return;}
+    var html='<p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:10px;">'+low.length+' peptide'+(low.length!==1?'s':'')+' at or below threshold:</p>';
+    low.forEach(function(p){
+        var days=calcDaysRemaining(p), dc=daysClass(days), isout=p.vialsOnHand===0;
+        var daysSpan=days!==null?(' \u00b7 <span class="'+dc+'">'+(days===0?'Out now':days+' days left')+'</span>'):'';
+        html+='<div class="low-stock-row '+(isout?'out':'')+'">'+
+              '<div><strong>'+p.name+'</strong> \u2014 '+p.mgPerVial+(p.unit||'mg')+'/vial'+
+              '<div class="low-stock-meta">'+p.vialsOnHand+' vials on hand \u00b7 threshold: '+p.reorderThreshold+daysSpan+'</div></div>'+
+              '<button class="btn-warning btn-small" onclick="quickAddLow(\''+p.id+'\')">+ Add to Order</button></div>';
+    });
+    panel.innerHTML=html;
+}
+
+function quickAddLow(peptideId){
+    var p=appData.peptides.find(function(x){return x.id===peptideId;}); if (!p) return;
+    var order=getActiveOrder();
+    if (!order||order.status!=='saved'){
+        if (!confirm('No active saved order. Create one now?')) return;
+        newOrder(); order=getActiveOrder();
+    }
+    var catItem=CATALOG.find(function(c){return c.name===p.name&&c.mgPerVial===p.mgPerVial;});
+    if (!catItem){alert('Item not found in catalog.');return;}
+    var kits=1;
+    if (p.dailyDose&&p.dosesPerWeek&&p.cycleDuration){var cu=p.dailyDose*p.dosesPerWeek*p.cycleDuration;var vc=isIU(p)?p.mgPerVial:p.mgPerVial*1000;kits=Math.max(1,Math.ceil(Math.ceil(cu/vc)/p.vialsPerKit));}
+    addToCart(catItem,kits);
+}
+
+function renderReorderCatalog(){
+    var tbody=document.getElementById('reorder-catalog-tbody'); if (!tbody) return;
+    var search=(document.getElementById('reorder-search')?document.getElementById('reorder-search').value:'').toLowerCase();
+    var filter=document.getElementById('reorder-filter')?document.getElementById('reorder-filter').value:'all';
+    var order=getActiveOrder();
+    var inCart=new Set((order?order.items:[]).map(function(i){return i.name+'|'+i.mgPerVial;}));
+    var inSupply=new Set(appData.peptides.map(function(p){return p.name+'|'+p.mgPerVial;}));
+    var lowKeys=new Set(appData.peptides.filter(function(p){return p.vialsOnHand<=p.reorderThreshold;}).map(function(p){return p.name+'|'+p.mgPerVial;}));
+    var items=CATALOG;
+    if (search) items=items.filter(function(p){return p.name.toLowerCase().indexOf(search)>-1;});
+    if (filter==='supply') items=items.filter(function(p){return inSupply.has(p.name+'|'+p.mgPerVial);});
+    if (filter==='new')    items=items.filter(function(p){return !inSupply.has(p.name+'|'+p.mgPerVial);});
+    if (filter==='low')    items=items.filter(function(p){return lowKeys.has(p.name+'|'+p.mgPerVial);});
+    if (!items.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-secondary);">No items found</td></tr>';return;}
+    var isEditable=order&&order.status==='saved';
+    var html='';
+    items.forEach(function(p){
+        var key=p.name+'|'+p.mgPerVial;
+        var ic=inCart.has(key), ils=lowKeys.has(key), iis=inSupply.has(key);
+        var sp=appData.peptides.find(function(x){return x.name===p.name&&x.mgPerVial===p.mgPerVial;});
+        var days=sp?calcDaysRemaining(sp):null, dc=daysClass(days);
+        var stxt=ic?'In Cart':ils?'Low Stock':iis?'In Supply':'New';
+        var scol=ic?'var(--purple)':ils?'var(--warning)':iis?'var(--success)':'var(--text-secondary)';
+        var sk=key.replace(/[^a-z0-9]/gi,'_');
+        var daysCell=days!==null?'<span class="'+dc+'">'+(days===0?'Out':days+' days')+'</span>':'<span style="color:var(--text-secondary);">—</span>';
+        var actionCell=isEditable?'<button class="btn-primary btn-small" onclick="addFromCatalogRow(\''+p.name+'\','+p.mgPerVial+')">'+(ic?'+ More':'Add')+'</button>':'<span style="color:var(--text-secondary);font-size:0.82rem;">Locked</span>';
+        html+='<tr><td><strong>'+p.name+'</strong>'+(p.note?'<br><small style="color:var(--text-secondary);">'+p.note+'</small>':'')+
+              '</td><td>'+p.mgPerVial+' '+(p.unit||'mg')+' \xd7 '+p.vialsPerKit+
+              '</td><td>$'+p.price+
+              '</td><td><span style="color:'+scol+';font-weight:600;font-size:0.82rem;">'+stxt+'</span>'+
+              '</td><td>'+daysCell+
+              '</td><td><input type="number" value="1" min="1" style="width:55px;padding:4px 6px;font-size:0.85rem;text-align:center;" id="qty_'+sk+'">'+
+              '</td><td>'+actionCell+'</td></tr>';
+    });
+    tbody.innerHTML=html;
+}
+
+function addFromCatalogRow(name, mgPerVial){
+    var catItem=CATALOG.find(function(c){return c.name===name&&c.mgPerVial===mgPerVial;}); if (!catItem) return;
+    var sk=(name+'|'+mgPerVial).replace(/[^a-z0-9]/gi,'_');
+    var qtyEl=document.getElementById('qty_'+sk);
+    addToCart(catItem,qtyEl?parseInt(qtyEl.value)||1:1);
+}
+
+function exportOrderCSV(){
+    var order=getActiveOrder(); if (!order||!order.items.length){alert('No items to export.');return;}
+    var rows=[['Order Name',order.name],['Status',order.status],['Supplier',order.supplier||''],['Notes',order.notes||''],['Date',fmtDateTime(order.createdAt)],[],['Peptide','Size','Unit','Supplier','Qty (Kits)','Vials','Unit Price','Line Total']];
+    order.items.forEach(function(i){rows.push([i.name,i.mgPerVial+(i.unit||'mg'),i.unit||'mg',i.supplier||'',i.qty,i.qty*i.vialsPerKit,'$'+i.price,'$'+(i.qty*i.price).toFixed(2)]);});
+    rows.push([]); rows.push(['Order Total','','','','','','$'+order.items.reduce(function(s,i){return s+i.qty*i.price;},0).toFixed(2)]);
+    dlCSV(rows,'order-'+(order.name||'export').replace(/\s+/g,'-').toLowerCase());
+}
+
+function renderOrderHistory(){
+    var container=document.getElementById('order-history-list');
+    if (!appData.orders.length){container.innerHTML='<div class="empty-state"><p>No orders yet.</p></div>';return;}
+    var sorted=appData.orders.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});
+    var html='';
+    sorted.forEach(function(o){
+        var sub=o.items.reduce(function(s,i){return s+i.qty*i.price;},0);
+        var tv=o.items.reduce(function(s,i){return s+i.qty*i.vialsPerKit;},0);
+        var isActive=o.id===activeOrderId;
+        var placedLine=o.status==='placed'?'<div style="font-size:0.8rem;color:var(--accent);margin-bottom:8px;">\uD83D\uDCE6 Placed: '+fmtDateTime(o.placedAt)+'</div>':'';
+        var recvdLine=o.status==='received'?'<div style="font-size:0.8rem;color:var(--success);margin-bottom:8px;">\u2713 Received: '+fmtDateTime(o.receivedAt)+'</div>':'';
+        var dupBtn='<button class="btn-ghost btn-small" onclick="duplicateOrder(\''+o.id+'\')">📋 Duplicate</button> ';
+        var openBtn=!isActive?'<button class="btn-ghost btn-small" onclick="openOrder(\''+o.id+'\')">Open</button> ':'';
+        var delBtn=o.status==='saved'&&!isActive?'<button class="btn-danger btn-small" onclick="deleteOrderById(\''+o.id+'\')">🗑️</button>':'';
+        html+='<div class="order-card'+(isActive?' active-order':'')+'">'+
+              '<div class="order-card-header">'+
+              '<div><strong>'+o.name+'</strong><span class="status-badge order-status-'+o.status+'" style="margin-left:8px;">'+o.status.toUpperCase()+'</span>'+(isActive?'<span style="font-size:0.75rem;color:var(--accent);margin-left:6px;">\u25cf Open</span>':'')+'</div>'+
+              '<div style="font-size:0.8rem;color:var(--text-secondary);">'+fmtDateTime(o.createdAt)+(o.supplier?' \u00b7 '+o.supplier:'')+'</div></div>'+
+              '<div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:10px;">'+o.items.length+' item'+(o.items.length!==1?'s':'')+' \u00b7 '+tv+' vials \u00b7 <strong style="color:var(--text-primary);">$'+sub.toFixed(2)+'</strong>'+(o.notes?' \u00b7 <em>'+o.notes+'</em>':'')+'</div>'+
+              placedLine+recvdLine+
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+openBtn+dupBtn+'<button class="btn-ghost btn-small" onclick="exportOrderById(\''+o.id+'\')">⬇ CSV</button>'+delBtn+'</div></div>';
+    });
+    container.innerHTML=html;
+}
+
+function exportOrderById(orderId){var prev=activeOrderId;activeOrderId=orderId;exportOrderCSV();activeOrderId=prev;}
+
+function deleteOrderById(orderId){
+    var o=appData.orders.find(function(x){return x.id===orderId;}); if (!o) return;
+    if (!confirm('Delete "'+o.name+'"?')) return;
+    appData.orders=appData.orders.filter(function(x){return x.id!==orderId;});
+    dbDelete('orders',orderId);
+    if (activeOrderId===orderId) closeActiveOrder();
+    else renderOrderHistory();
+}
+
+function renderReorderTab(){
+    renderLowStockPanel();
+    if (activeOrderId&&getActiveOrder()) openOrder(activeOrderId);
+    else { document.getElementById('active-order-card').style.display='none'; document.getElementById('add-catalog-card').style.display='none'; document.getElementById('no-order-prompt').style.display='block'; }
+    renderOrderHistory();
+    renderTemplatesList();
+}
+
+// ============================================================
+// SETTINGS — BACKUP & RESTORE
+// ============================================================
+async function backupData(){
+    var backup={peptides:appData.peptides,doses:appData.doses,cycles:appData.cycles,orders:appData.orders,templates:appData.templates,protocols:appData.protocols,settings:appData.settings,exportedAt:new Date().toISOString(),version:1};
+    var blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='peptide-tracker-backup-'+new Date().toISOString().split('T')[0]+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+async function restoreData(event){
+    var file=event.target.files[0]; if (!file) return;
+    var reader=new FileReader();
+    reader.onload=async function(e){
+        try{
+            var backup=JSON.parse(e.target.result);
+            if (!backup.peptides&&!backup.doses){alert('Invalid backup file.');return;}
+            if (!confirm('Restore this backup? All current data will be replaced.')) return;
+            await dbClear('peptides'); await dbClear('doses'); await dbClear('cycles'); await dbClear('orders'); await dbClear('templates'); await dbClear('protocols');
+            appData.peptides=backup.peptides||[]; appData.doses=backup.doses||[]; appData.cycles=backup.cycles||[]; appData.orders=backup.orders||[]; appData.templates=backup.templates||[]; appData.protocols=backup.protocols||[];
+            if (backup.settings) appData.settings=backup.settings;
+            for (var i=0;i<appData.peptides.length;i++) await dbPut('peptides',appData.peptides[i]);
+            for (var i=0;i<appData.doses.length;i++) await dbPut('doses',appData.doses[i]);
+            for (var i=0;i<appData.cycles.length;i++) await dbPut('cycles',appData.cycles[i]);
+            for (var i=0;i<appData.orders.length;i++) await dbPut('orders',appData.orders[i]);
+            for (var i=0;i<appData.templates.length;i++) await dbPut('templates',appData.templates[i]);
+            for (var i=0;i<appData.protocols.length;i++) await dbPut('protocols',appData.protocols[i]);
+            if (backup.settings) await dbPut('settings',{id:'app_settings',...backup.settings});
+            applyTheme(); renderAll(); renderProtocolTemplatesList(); updateReorderBadge(); checkLowStockNotification();
+            alert('Data restored successfully!');
+        } catch(err){alert('Restore failed: '+err.message);}
+    };
+    reader.readAsText(file); event.target.value='';
+}
+
+async function clearAllData(){
+    if (!confirm('Delete ALL data? This cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure?')) return;
+    for (var i=0;i<STORES.length;i++) await dbClear(STORES[i]);
+    appData={peptides:[],doses:[],cycles:[],orders:[],templates:[],protocols:[],settings:{theme:'dark'}};
+    activeOrderId=null;
+    renderAll(); updateReorderBadge(); checkLowStockNotification();
+    alert('All data cleared.');
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll(){
+    renderSupply(); updateDoseDropdown(); renderHistory(); renderCalendar(); renderCatalog();
+    renderSiteRotation(); renderProtocolTemplatesList();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init(){
+    try{
+        await loadAllData();
+        initCatalogDropdown();
+        renderAll();
+        applyTheme();
+        renderCatalog();
+        updateReorderBadge();
+        checkLowStockNotification();
+        console.log('[Peptide Tracker] Ready \u2014 IndexedDB \u2014 '+appData.peptides.length+' peptides, '+appData.doses.length+' doses');
+    }catch(e){
+        console.error('[Init] Error:',e);
+        document.body.innerHTML='<div style="padding:40px;text-align:center;font-family:sans-serif;color:#ef4444;"><h2>Failed to initialize</h2><p>'+e.message+'</p><p>This browser may not support IndexedDB. Try Chrome, Firefox, or Edge.</p></div>';
+    }
+}
+
+init();
+</script>
+</body>
+</html>
