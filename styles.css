@@ -73,10 +73,10 @@ header {
     gap:1px;
 }
 .header-logo {
-    height:100px;
+    height:70px;
     width:auto;
+    max-width:100%;
     display:block;
-    margin: -4px 0 -4px;
 }
 .header-subtitle {
     font-size:0.65rem;
