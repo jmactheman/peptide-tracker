@@ -336,12 +336,40 @@ button {
 .days-crit { color:var(--danger);  font-weight:600; }
 
 /* ── SITE ROTATION ───────────────────────────────────────── */
-.rotation-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:12px; }
-.rotation-site { background:var(--bg-primary); border-radius:8px; padding:12px; border:2px solid var(--border); text-align:center; }
-.rotation-site.next   { border-color:var(--success); background:rgba(34,197,94,0.06); }
-.rotation-site.recent { border-color:var(--warning); }
-.rotation-site-name   { font-weight:600; font-size:0.9rem; margin-bottom:4px; }
-.rotation-badge { font-size:0.72rem; padding:2px 8px; border-radius:10px; margin-top:4px; display:inline-block; }
+.rotation-grid {
+    display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; justify-content:center;
+    margin-top:14px;
+}
+.body-svg { width:200px; max-width:100%; flex-shrink:0; color:var(--text-secondary); }
+.body-site { cursor:pointer; transition:transform 0.15s; transform-origin:center; transform-box:fill-box; }
+.body-site:hover { transform:scale(1.18); }
+.body-site.selected circle { stroke:var(--text-primary); stroke-width:3; }
+.body-site.next-pulse circle:first-of-type { animation:body-pulse 1.6s ease-in-out infinite; }
+@keyframes body-pulse {
+    0%,100% { opacity:1; r:11; }
+    50%     { opacity:0.55; r:14; }
+}
+.body-legend {
+    flex:1; min-width:160px; max-width:280px;
+    font-size:0.85rem;
+}
+.body-legend h4 {
+    font-size:0.74rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.07em; color:var(--text-secondary); margin-bottom:10px;
+}
+.body-legend-row {
+    display:flex; align-items:center; gap:10px;
+    padding:5px 0; font-size:0.83rem;
+}
+.body-dot-legend {
+    width:12px; height:12px; border-radius:50%; flex-shrink:0;
+    display:inline-block;
+}
+.body-tip {
+    margin-top:14px; font-size:0.78rem; color:var(--text-secondary);
+    padding:8px 10px; background:var(--bg-primary);
+    border-radius:6px; border:1px dashed var(--border);
+}
 
 /* ── SETTINGS ────────────────────────────────────────────── */
 .settings-section { margin-bottom:28px; padding-bottom:28px; border-bottom:1px solid var(--border); }

@@ -917,35 +917,110 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
 });
 
 // ── INJECTION SITE ROTATION ───────────────────────────────────
+// Site coordinates on the body SVG (200×400 viewBox)
+var BODY_SITE_POSITIONS = {
+    'Deltoid - Left':  { x:  46, y:  98 },
+    'Deltoid - Right': { x: 154, y:  98 },
+    'Abdomen - Left':  { x:  84, y: 168 },
+    'Abdomen - Right': { x: 116, y: 168 },
+    'Glute - Left':    { x:  72, y: 232 },
+    'Glute - Right':   { x: 128, y: 232 },
+    'Thigh - Left':    { x:  82, y: 295 },
+    'Thigh - Right':   { x: 118, y: 295 }
+};
+
 function renderSiteRotation() {
-    var grid   = document.getElementById('rotation-grid');
+    var grid = document.getElementById('rotation-grid');
+    if (!grid) return;
+
+    // Sort doses newest-first; index 0 = most recent
     var recent = appData.doses.slice().sort(function(a,b) {
         return b.date.localeCompare(a.date) || ((b.time||'').localeCompare(a.time||''));
     }).slice(0, 14);
 
     var lastUsed = {};
-    recent.forEach(function(d,i) { if (d.site && lastUsed[d.site] === undefined) lastUsed[d.site] = i; });
+    recent.forEach(function(d,i) {
+        if (d.site && lastUsed[d.site] === undefined) lastUsed[d.site] = i;
+    });
 
-    var sorted = INJECTION_SITES.filter(function(s) { return s !== 'Other'; }).sort(function(a,b) {
+    var sites = INJECTION_SITES.filter(function(s) { return s !== 'Other'; });
+    // Next = least-recently-used (or unused)
+    var sorted = sites.slice().sort(function(a,b) {
         return (lastUsed[b] !== undefined ? lastUsed[b] : 999) - (lastUsed[a] !== undefined ? lastUsed[a] : 999);
     });
     var next = sorted[sorted.length - 1];
-    var html = '';
 
-    sorted.forEach(function(site) {
-        var last     = lastUsed[site];
-        var isNext   = (site === next);
-        var isRecent = (last !== undefined && last < 3);
-        var cls      = 'rotation-site' + (isNext ? ' next' : isRecent ? ' recent' : '');
-        var badge    = '';
-        if (isNext)       badge = '<span class="rotation-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">← Next</span>';
-        else if (last===0) badge = '<span class="rotation-badge" style="background:rgba(239,68,68,0.15);color:var(--danger);">Last used</span>';
-        else if (last!==undefined) badge = '<span class="rotation-badge" style="background:rgba(245,158,11,0.15);color:var(--warning);">' + last + ' ago</span>';
-        else badge = '<span class="rotation-badge" style="background:rgba(148,163,184,0.15);color:var(--text-secondary);">Unused</span>';
-        html += '<div class="' + cls + '"><div class="rotation-site-name">' + escapeHtml(site) + '</div>' + badge + '</div>';
-    });
+    function colorFor(site) {
+        var idx = lastUsed[site];
+        if (site === next)        return 'var(--success)';
+        if (idx === undefined)    return 'var(--bg-tertiary)';
+        if (idx === 0)            return 'var(--danger)';
+        if (idx <= 2)             return 'var(--warning)';
+        return 'var(--text-secondary)';
+    }
+    function labelFor(site) {
+        var idx = lastUsed[site];
+        if (site === next)     return 'Next';
+        if (idx === undefined) return 'Unused';
+        if (idx === 0)         return 'Last used';
+        return idx + ' dose' + (idx === 1 ? '' : 's') + ' ago';
+    }
 
-    grid.innerHTML = html || '<p style="color:var(--text-secondary);">Log injections with site info to see rotation guidance.</p>';
+    var dotsSvg = sites.map(function(site) {
+        var p = BODY_SITE_POSITIONS[site]; if (!p) return '';
+        var c = colorFor(site);
+        var isNext = (site === next);
+        var safeId = site.replace(/[^a-z0-9]/gi, '_');
+        return '<g class="body-site' + (isNext ? ' next-pulse' : '') + '" data-site="' + escapeHtml(site) + '" onclick="selectSiteFromBody(\'' + site.replace(/'/g, "\\'") + '\')">' +
+            '<circle cx="' + p.x + '" cy="' + p.y + '" r="11" fill="' + c + '" stroke="var(--bg-secondary)" stroke-width="2.5"/>' +
+            '<title>' + escapeHtml(site) + ' — ' + labelFor(site) + '</title>' +
+            '</g>';
+    }).join('');
+
+    var bodySvg =
+        '<svg class="body-svg" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">' +
+            // Head
+            '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
+            // Neck
+            '<rect x="93" y="60" width="14" height="12" fill="currentColor" opacity="0.12"/>' +
+            // Torso (shoulders → waist)
+            '<path d="M 55 78 L 145 78 L 138 205 L 62 205 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Left arm
+            '<path d="M 55 78 L 30 92 L 24 200 L 40 205 L 50 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Right arm
+            '<path d="M 145 78 L 170 92 L 176 200 L 160 205 L 150 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Pelvis
+            '<path d="M 62 205 L 138 205 L 145 250 L 55 250 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Left leg
+            '<path d="M 60 250 L 96 250 L 92 380 L 64 380 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Right leg
+            '<path d="M 104 250 L 140 250 L 136 380 L 108 380 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            dotsSvg +
+        '</svg>';
+
+    var legend =
+        '<div class="body-legend">' +
+            '<h4>Status</h4>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--success);"></span><span>Next site (' + escapeHtml(next) + ')</span></div>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--danger);"></span><span>Just used</span></div>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--warning);"></span><span>Used recently</span></div>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--text-secondary);"></span><span>3+ doses ago</span></div>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--bg-tertiary);border:1px solid var(--border);"></span><span>Never used</span></div>' +
+            '<div class="body-tip">Tap a site to select it for the dose form.</div>' +
+        '</div>';
+
+    grid.innerHTML = bodySvg + legend;
+}
+
+function selectSiteFromBody(site) {
+    var sel = document.getElementById('injection-site');
+    if (sel) {
+        sel.value = site;
+        sel.dispatchEvent(new Event('change'));
+    }
+    document.querySelectorAll('.body-site').forEach(function(g) { g.classList.remove('selected'); });
+    var picked = document.querySelector('.body-site[data-site="' + site.replace(/"/g, '\\"') + '"]');
+    if (picked) picked.classList.add('selected');
 }
 
 // ── HISTORY ───────────────────────────────────────────────────
