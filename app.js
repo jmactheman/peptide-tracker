@@ -11,6 +11,7 @@ var appData = {
 
 var selectedColor     = PEPTIDE_COLORS[0];
 var editSelectedColor = PEPTIDE_COLORS[0];
+var bodyView          = 'front';
 
 async function loadAllData() {
     appData.peptides  = await dbGetAll('peptides');
@@ -39,7 +40,7 @@ function toMcg(amt, p) { // convert display unit value back to mcg for storage/c
     if (!amt || !p || p.displayUnit !== 'mg' || p.unit !== 'mg') return amt;
     return amt * 1000;
 }
-function mlToUnits(ml, t) { return t === 'U50' ? ml * 50 : ml * 100; }
+function mlToUnits(ml) { return ml * 100; }
 function getPeptideColor(p) { return (p && p.color) ? p.color : 'var(--accent)'; }
 
 function escapeHtml(s) {
@@ -84,7 +85,7 @@ function calcReconInfo(p) {
     return {
         waterMl: wml, totalUnits: total, unitsPerMl: pml, concentration: pml / 100,
         remainingUnits: rem, mlPerDose: ml,
-        syringeU100: mlToUnits(ml, 'U100'), syringeU50: mlToUnits(ml, 'U50'),
+        units: mlToUnits(ml),
         dosesRemaining: dose > 0 ? Math.floor(rem / dose) : 0,
         unit: isIU(p) ? 'IU' : 'mcg'
     };
@@ -345,7 +346,6 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
         trackingMode:    document.getElementById('peptide-tracking-mode').value || 'simple',
         dosesPerWeek:    parseInt(document.getElementById('doses-per-week').value) || 7,
         cycleDuration:   parseInt(document.getElementById('cycle-duration').value) || 0,
-        syringeType:     document.getElementById('syringe-type').value,
         reorderThreshold:parseInt(document.getElementById('reorder-threshold').value) || 5,
         color: selectedColor, reconstituted: null, createdAt: new Date().toISOString(),
         schedule: readScheduleUI('supply-sched-container')
@@ -433,11 +433,8 @@ function renderSupply() {
 
         var syH = '';
         if (!simple && ri && p.dailyDose) {
-            var lb = p.syringeType === 'U50' ? 'U-50' : 'U-100';
-            var u  = p.syringeType === 'U50' ? ri.syringeU50 : ri.syringeU100;
             syH = '<div class="syringe-display">' +
-                  '<span class="syringe-badge">' + u.toFixed(1) + ' units on ' + lb + '</span>' +
-                  '<span class="syringe-badge" style="background:rgba(34,197,94,0.15);color:var(--success);">U-100: ' + ri.syringeU100.toFixed(1) + ' | U-50: ' + ri.syringeU50.toFixed(1) + '</span>' +
+                  '<span class="syringe-badge">' + ri.units.toFixed(1) + ' units</span>' +
                   '</div>';
         }
 
@@ -525,8 +522,7 @@ document.getElementById('water-ml').addEventListener('input', function() {
         '<p>Concentration: <span class="highlight">' + (pml / 100).toFixed(2) + ' ' + du + ' per unit</span></p>' +
         (dose > 0
             ? '<p>For ' + dose + ' ' + du + ': draw <span class="highlight">' + mpd.toFixed(3) + ' mL</span></p>' +
-              '<p>→ U-100: <span class="highlight-green">' + mlToUnits(mpd,'U100').toFixed(1) + ' units</span></p>' +
-              '<p>→ U-50:  <span class="highlight-purple">' + mlToUnits(mpd,'U50').toFixed(1) + ' units</span></p>' +
+              '<p>→ <span class="highlight-green">' + mlToUnits(mpd).toFixed(1) + ' units</span></p>' +
               '<p>Doses per vial: <span class="highlight">' + doses + '</span></p>'
             : '') +
         '</div>';
@@ -569,7 +565,6 @@ function openEdit(id) {
     document.getElementById('edit-dose').value            = dispAmt(p.dailyDose, p);
     document.getElementById('edit-dpw').value             = p.dosesPerWeek;
     document.getElementById('edit-cycle-dur').value       = p.cycleDuration || '';
-    document.getElementById('edit-syringe').value         = p.syringeType || 'U100';
     document.getElementById('edit-reorder').value         = p.reorderThreshold || 5;
     document.getElementById('edit-display-unit').value    = p.displayUnit || 'mcg';
     document.getElementById('edit-tracking-mode').value   = p.trackingMode || 'simple';
@@ -598,7 +593,6 @@ document.getElementById('edit-form').addEventListener('submit', async function(e
     p.trackingMode     = document.getElementById('edit-tracking-mode').value || 'simple';
     p.dosesPerWeek     = parseInt(document.getElementById('edit-dpw').value) || 7;
     p.cycleDuration    = parseInt(document.getElementById('edit-cycle-dur').value) || 0;
-    p.syringeType      = document.getElementById('edit-syringe').value;
     p.reorderThreshold = parseInt(document.getElementById('edit-reorder').value) || 5;
     p.color            = editSelectedColor;
     p.schedule         = readScheduleUI('edit-sched-container');
@@ -846,13 +840,10 @@ document.getElementById('dose-peptide').addEventListener('change', function() {
 
     if (p.reconstituted) {
         var ri = calcReconInfo(p);
-        var lb = p.syringeType === 'U50' ? 'U-50' : 'U-100';
-        var u  = p.syringeType === 'U50' ? ri.syringeU50 : ri.syringeU100;
         cnt.innerHTML = '<div class="dose-calc">' +
             '<p><strong>' + escapeHtml(p.name) + '</strong> — Active vial</p>' +
-            '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> for ' + dispAmt(p.dailyDose, p) + ' ' + du + '</p>' +
-            '<p>' + lb + ': <span class="highlight">' + u.toFixed(1) + ' units</span> &nbsp;|&nbsp; U-100: ' + ri.syringeU100.toFixed(1) + ' | U-50: ' + ri.syringeU50.toFixed(1) + '</p>' +
-            '<p>Remaining: ' + ri.remainingUnits.toFixed(1) + ' ' + du + ' (' + ri.dosesRemaining + ' doses)</p></div>';
+            '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> — <span class="highlight">' + ri.units.toFixed(1) + ' units</span></p>' +
+            '<p>For ' + dispAmt(p.dailyDose, p) + ' ' + du + ' | Remaining: ' + ri.remainingUnits.toFixed(1) + ' ' + du + ' (' + ri.dosesRemaining + ' doses)</p></div>';
     } else {
         cnt.innerHTML = '<div class="dose-calc" style="border:1px solid var(--warning);background:rgba(245,158,11,0.08);"><p><strong>⚠️ ' + escapeHtml(p.name) + ' not reconstituted.</strong></p></div>';
     }
@@ -917,17 +908,30 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
 });
 
 // ── INJECTION SITE ROTATION ───────────────────────────────────
-// Site coordinates on the body SVG (200×400 viewBox)
+// Site coordinates on the body SVG (200×400 viewBox) — split by view
 var BODY_SITE_POSITIONS = {
-    'Deltoid - Left':  { x:  46, y:  98 },
-    'Deltoid - Right': { x: 154, y:  98 },
-    'Abdomen - Left':  { x:  84, y: 168 },
-    'Abdomen - Right': { x: 116, y: 168 },
-    'Glute - Left':    { x:  72, y: 232 },
-    'Glute - Right':   { x: 128, y: 232 },
-    'Thigh - Left':    { x:  82, y: 295 },
-    'Thigh - Right':   { x: 118, y: 295 }
+    front: {
+        'Deltoid - Left':  { x:  46, y:  98 },
+        'Deltoid - Right': { x: 154, y:  98 },
+        'Abdomen - Left':  { x:  84, y: 168 },
+        'Abdomen - Right': { x: 116, y: 168 },
+        'Thigh - Left':    { x:  82, y: 300 },
+        'Thigh - Right':   { x: 118, y: 300 }
+    },
+    back: {
+        'Deltoid - Left':  { x:  46, y:  98 },
+        'Deltoid - Right': { x: 154, y:  98 },
+        'Glute - Left':    { x:  78, y: 225 },
+        'Glute - Right':   { x: 122, y: 225 },
+        'Thigh - Left':    { x:  82, y: 300 },
+        'Thigh - Right':   { x: 118, y: 300 }
+    }
 };
+
+function toggleBodyView(v) {
+    bodyView = v;
+    renderSiteRotation();
+}
 
 function renderSiteRotation() {
     var grid = document.getElementById('rotation-grid');
@@ -943,9 +947,12 @@ function renderSiteRotation() {
         if (d.site && lastUsed[d.site] === undefined) lastUsed[d.site] = i;
     });
 
-    var sites = INJECTION_SITES.filter(function(s) { return s !== 'Other'; });
-    // Next = least-recently-used (or unused)
-    var sorted = sites.slice().sort(function(a,b) {
+    var allSites = INJECTION_SITES.filter(function(s) { return s !== 'Other'; });
+    var positions = BODY_SITE_POSITIONS[bodyView];
+    var viewSites = allSites.filter(function(s) { return positions[s]; });
+
+    // Next = least-recently-used (or unused) across ALL sites (not just visible ones)
+    var sorted = allSites.slice().sort(function(a,b) {
         return (lastUsed[b] !== undefined ? lastUsed[b] : 999) - (lastUsed[a] !== undefined ? lastUsed[a] : 999);
     });
     var next = sorted[sorted.length - 1];
@@ -966,31 +973,45 @@ function renderSiteRotation() {
         return idx + ' dose' + (idx === 1 ? '' : 's') + ' ago';
     }
 
-    var dotsSvg = sites.map(function(site) {
-        var p = BODY_SITE_POSITIONS[site]; if (!p) return '';
+    var dotsSvg = viewSites.map(function(site) {
+        var p = positions[site]; if (!p) return '';
         var c = colorFor(site);
         var isNext = (site === next);
-        var safeId = site.replace(/[^a-z0-9]/gi, '_');
         return '<g class="body-site' + (isNext ? ' next-pulse' : '') + '" data-site="' + escapeHtml(site) + '" onclick="selectSiteFromBody(\'' + site.replace(/'/g, "\\'") + '\')">' +
             '<circle cx="' + p.x + '" cy="' + p.y + '" r="11" fill="' + c + '" stroke="var(--bg-secondary)" stroke-width="2.5"/>' +
             '<title>' + escapeHtml(site) + ' — ' + labelFor(site) + '</title>' +
             '</g>';
     }).join('');
 
+    var isFront = bodyView === 'front';
+
+    // Front silhouette paths
+    var frontPaths =
+        '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
+        '<circle cx="91" cy="36" r="3" fill="currentColor" fill-opacity="0.2"/>' +
+        '<circle cx="109" cy="36" r="3" fill="currentColor" fill-opacity="0.2"/>' +
+        '<path d="M 96 44 Q 100 48 104 44" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.25"/>';
+
+    // Back silhouette — back of head with spine indicator
+    var backPaths =
+        '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
+        '<line x1="100" y1="72" x2="100" y2="205" stroke="currentColor" stroke-width="1.2" opacity="0.18" stroke-dasharray="4,3"/>';
+
     var bodySvg =
         '<svg class="body-svg" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">' +
-            // Head
-            '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
+            (isFront ? frontPaths : backPaths) +
             // Neck
             '<rect x="93" y="60" width="14" height="12" fill="currentColor" opacity="0.12"/>' +
-            // Torso (shoulders → waist)
+            // Torso
             '<path d="M 55 78 L 145 78 L 138 205 L 62 205 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
             // Left arm
             '<path d="M 55 78 L 30 92 L 24 200 L 40 205 L 50 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
             // Right arm
             '<path d="M 145 78 L 170 92 L 176 200 L 160 205 L 150 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
-            // Pelvis
-            '<path d="M 62 205 L 138 205 L 145 250 L 55 250 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+            // Pelvis / glute area (back view gets rounder shape)
+            (isFront
+                ? '<path d="M 62 205 L 138 205 L 145 250 L 55 250 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>'
+                : '<path d="M 62 205 L 138 205 Q 148 240 138 255 L 62 255 Q 52 240 62 205 Z" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1.5"/>') +
             // Left leg
             '<path d="M 60 250 L 96 250 L 92 380 L 64 380 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
             // Right leg
@@ -998,18 +1019,25 @@ function renderSiteRotation() {
             dotsSvg +
         '</svg>';
 
+    var iF = bodyView === 'front';
+    var toggle =
+        '<div class="body-view-toggle">' +
+            '<button class="body-view-btn' + (iF ? ' active' : '') + '" onclick="toggleBodyView(\'front\')">Front</button>' +
+            '<button class="body-view-btn' + (!iF ? ' active' : '') + '" onclick="toggleBodyView(\'back\')">Back</button>' +
+        '</div>';
+
     var legend =
         '<div class="body-legend">' +
             '<h4>Status</h4>' +
-            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--success);"></span><span>Next site (' + escapeHtml(next) + ')</span></div>' +
+            '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--success);"></span><span>Next (' + escapeHtml(next) + ')</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--danger);"></span><span>Just used</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--warning);"></span><span>Used recently</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--text-secondary);"></span><span>3+ doses ago</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--bg-tertiary);border:1px solid var(--border);"></span><span>Never used</span></div>' +
-            '<div class="body-tip">Tap a site to select it for the dose form.</div>' +
+            '<div class="body-tip">Tap a site to log it.</div>' +
         '</div>';
 
-    grid.innerHTML = bodySvg + legend;
+    grid.innerHTML = toggle + '<div class="body-diagram-row">' + bodySvg + legend + '</div>';
 }
 
 function selectSiteFromBody(site) {
@@ -1521,7 +1549,7 @@ async function saveProtocolTemplate() {
         var p = appData.peptides.find(function(x) { return x.id === id; });
         return { name:p.name, mgPerVial:p.mgPerVial, unit:p.unit, vialsPerKit:p.vialsPerKit,
                  dailyDose:p.dailyDose, dosesPerWeek:p.dosesPerWeek, cycleDuration:p.cycleDuration,
-                 syringeType:p.syringeType, color:p.color };
+                 color:p.color };
     });
 
     var proto = { id: genId(), name: name, peptides: peptides, createdAt: new Date().toISOString() };
@@ -1560,7 +1588,7 @@ async function applyProtocolTemplate(protoId) {
             id: genId(), name: pp.name, mgPerVial: pp.mgPerVial, unit: pp.unit || 'mg',
             vialsPerKit: pp.vialsPerKit, vialsOnHand: pp.vialsPerKit,
             dailyDose: pp.dailyDose || 0, dosesPerWeek: pp.dosesPerWeek || 7,
-            cycleDuration: pp.cycleDuration || 0, syringeType: pp.syringeType || 'U100',
+            cycleDuration: pp.cycleDuration || 0,
             reorderThreshold: 5, color: pp.color || PEPTIDE_COLORS[0],
             reconstituted: null, createdAt: new Date().toISOString()
         };

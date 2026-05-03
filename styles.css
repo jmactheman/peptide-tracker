@@ -336,9 +336,23 @@ button {
 .days-crit { color:var(--danger);  font-weight:600; }
 
 /* ── SITE ROTATION ───────────────────────────────────────── */
-.rotation-grid {
+.rotation-grid { margin-top:14px; }
+.body-view-toggle {
+    display:flex; gap:0; justify-content:center; margin-bottom:14px;
+}
+.body-view-btn {
+    padding:6px 22px; font-size:0.82rem; font-weight:600;
+    background:var(--bg-primary); border:1px solid var(--border);
+    color:var(--text-secondary); cursor:pointer;
+    transition:background 0.15s, color 0.15s;
+}
+.body-view-btn:first-child { border-radius:8px 0 0 8px; }
+.body-view-btn:last-child  { border-radius:0 8px 8px 0; border-left:none; }
+.body-view-btn.active {
+    background:var(--accent); border-color:var(--accent); color:#fff;
+}
+.body-diagram-row {
     display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; justify-content:center;
-    margin-top:14px;
 }
 .body-svg { width:200px; max-width:100%; flex-shrink:0; color:var(--text-secondary); }
 .body-site { cursor:pointer; transition:transform 0.15s; transform-origin:center; transform-box:fill-box; }
