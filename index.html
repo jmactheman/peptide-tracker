@@ -440,5 +440,10 @@
 <script src="data.js?v=2"></script>
 <script src="db.js?v=2"></script>
 <script src="app.js?v=2"></script>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
+}
+</script>
 </body>
 </html>
