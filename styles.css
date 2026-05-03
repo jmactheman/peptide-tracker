@@ -62,12 +62,23 @@ header {
     gap:10px;
 }
 header h1 {
-    font-size:1.6rem;
+    flex:1;
+    text-align:center;
+    font-size:1.75rem;
+    font-weight:800;
     font-style:italic;
-    color:var(--text-primary);
-    letter-spacing:-0.01em;
+    color:var(--accent);
+    letter-spacing:-0.02em;
     margin:0;
 }
+.notif-btn-wrap { position:relative; flex-shrink:0; }
+.notif-dot {
+    position:absolute; top:-2px; right:-2px;
+    width:8px; height:8px;
+    background:var(--accent); border-radius:50%;
+    display:none;
+}
+.notif-dot.show { display:block; }
 .icon-btn {
     background:transparent;
     border:1px solid var(--border);
@@ -383,7 +394,7 @@ button {
     /* Tighten layout */
     .page-wrap { padding:12px 12px 90px; }
     header { padding:8px 0 12px; }
-    header h1 { font-size:1.35rem; }
+    header h1 { font-size:1.4rem; }
 
     /* Prevent iOS input zoom (must be 16px) */
     input, select, textarea { font-size:16px; }

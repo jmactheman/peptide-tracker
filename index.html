@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="icon.svg">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=3">
+    <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -17,7 +17,11 @@
     <header>
         <div class="header-row">
             <button class="icon-btn" onclick="switchTab('settings')" title="Settings">⚙️</button>
-            <h1>PepBros Tracker</h1>
+            <h1>PepBros</h1>
+            <div class="notif-btn-wrap">
+                <button class="icon-btn" onclick="showNotifications()" title="Notifications">🔔</button>
+                <span class="notif-dot" id="notif-dot"></span>
+            </div>
         </div>
     </header>
 
@@ -31,7 +35,6 @@
         <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
     </div>
 
-    <div class="notif-banner" id="notif-banner"></div>
 
     <!-- ── SUPPLY ─────────────────────────────────────────── -->
     <div id="supply" class="tab-content">
@@ -333,6 +336,16 @@
 </nav>
 
 <!-- ── MODALS ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="notif-modal">
+    <div class="modal">
+        <h2>🔔 Notifications</h2>
+        <div id="notif-modal-content"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('notif-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="reconstitute-modal">
     <div class="modal">
         <h2>💧 Reconstitute Vial</h2>
@@ -365,30 +378,30 @@
         <form id="edit-form">
             <input type="hidden" id="edit-id">
             <div class="form-grid">
-                <div class="form-group"><label>Vials on Hand</label><input type="number" id="edit-vials" required min="0"></div>
+                <div class="form-group">
+                    <label>Tracking Mode</label>
+                    <select id="edit-tracking-mode">
+                        <option value="simple">Simple</option>
+                        <option value="full">Full</option>
+                    </select>
+                </div>
+                <div class="form-group edit-full-only"><label>Vials on Hand</label><input type="number" id="edit-vials" min="0" value="0"></div>
                 <div class="form-group"><label id="edit-dose-label">Your Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
-                <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
-                <div class="form-group">
+                <div class="form-group edit-full-only"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
+                <div class="form-group edit-full-only">
                     <label>Syringe Type</label>
                     <select id="edit-syringe">
                         <option value="U100">U-100 (1 unit = 0.01 mL)</option>
                         <option value="U50">U-50 (1 unit = 0.02 mL)</option>
                     </select>
                 </div>
-                <div class="form-group"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
+                <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
                 <div class="form-group">
                     <label>Dose Display</label>
                     <select id="edit-display-unit">
                         <option value="mcg">mcg</option>
                         <option value="mg">mg</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Tracking Mode</label>
-                    <select id="edit-tracking-mode">
-                        <option value="simple">Simple</option>
-                        <option value="full">Full</option>
                     </select>
                 </div>
             </div>
@@ -435,9 +448,9 @@
     </div>
 </div>
 
-<script src="data.js?v=3"></script>
-<script src="db.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="data.js?v=4"></script>
+<script src="db.js?v=4"></script>
+<script src="app.js?v=4"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

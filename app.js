@@ -128,14 +128,30 @@ function applyTheme() {
 
 // ── LOW STOCK BANNER ─────────────────────────────────────────
 function checkLowStockNotification() {
-    var low    = appData.peptides.filter(function(p) { return p.vialsOnHand <= p.reorderThreshold; });
-    var banner = document.getElementById('notif-banner');
-    if (low.length) {
-        banner.textContent = '⚠️ Low stock: ' + low.map(function(p) { return p.name; }).join(', ');
-        banner.classList.add('show');
+    var low = appData.peptides.filter(function(p) {
+        if ((p.trackingMode || 'simple') === 'simple') return false;
+        return p.vialsOnHand <= (p.reorderThreshold || 5);
+    });
+    var dot = document.getElementById('notif-dot');
+    if (dot) dot.classList.toggle('show', low.length > 0);
+    window._lowStockAlerts = low;
+}
+
+function showNotifications() {
+    var low = window._lowStockAlerts || [];
+    var content = document.getElementById('notif-modal-content');
+    if (!low.length) {
+        content.innerHTML = '<p style="color:var(--text-secondary);padding:16px 0;">No active alerts.</p>';
     } else {
-        banner.classList.remove('show');
+        content.innerHTML = low.map(function(p) {
+            return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">' +
+                '<span style="font-size:1.2rem;">⚠️</span>' +
+                '<div><div style="font-weight:600;">' + escapeHtml(p.name) + '</div>' +
+                '<div style="font-size:0.83rem;color:var(--text-secondary);">' + p.vialsOnHand + ' vials left (reorder at ' + (p.reorderThreshold || 5) + ')</div></div>' +
+                '</div>';
+        }).join('');
     }
+    document.getElementById('notif-modal').classList.add('active');
 }
 
 // ── COLOR PICKER ─────────────────────────────────────────────
@@ -231,6 +247,13 @@ document.getElementById('peptide-display-unit').addEventListener('change', funct
 document.getElementById('peptide-tracking-mode').addEventListener('change', function() {
     var isSimple = this.value === 'simple';
     document.querySelectorAll('#peptide-form .full-mode-only').forEach(function(el) {
+        el.style.display = isSimple ? 'none' : '';
+    });
+});
+
+document.getElementById('edit-tracking-mode').addEventListener('change', function() {
+    var isSimple = this.value === 'simple';
+    document.querySelectorAll('#edit-form .edit-full-only').forEach(function(el) {
         el.style.display = isSimple ? 'none' : '';
     });
 });
@@ -366,8 +389,9 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
 
 // ── RENDER SUPPLY ─────────────────────────────────────────────
 function getStockStatus(p) {
-    if (p.vialsOnHand === 0)               return { txt:'OUT', cls:'status-critical' };
-    if (p.vialsOnHand <= p.reorderThreshold) return { txt:'LOW', cls:'status-low' };
+    if ((p.trackingMode || 'simple') === 'simple') return null;
+    if (p.vialsOnHand === 0)                return { txt:'OUT', cls:'status-critical' };
+    if (p.vialsOnHand <= (p.reorderThreshold || 5)) return { txt:'LOW', cls:'status-low' };
     return { txt:'OK', cls:'status-good' };
 }
 
@@ -381,8 +405,11 @@ function renderSupply() {
         return;
     }
 
-    var tv = appData.peptides.reduce(function(s,p) { return s + p.vialsOnHand; }, 0);
-    var ls = appData.peptides.filter(function(p) { return p.vialsOnHand <= p.reorderThreshold; }).length;
+    var tv = appData.peptides.reduce(function(s,p) { return s + (p.vialsOnHand || 0); }, 0);
+    var ls = appData.peptides.filter(function(p) {
+        if ((p.trackingMode || 'simple') === 'simple') return false;
+        return p.vialsOnHand <= (p.reorderThreshold || 5);
+    }).length;
     var ac = (appData.cycles || []).filter(function(c) { return c.status === 'active'; }).length;
 
     summary.innerHTML =
@@ -417,7 +444,7 @@ function renderSupply() {
         var projHtml = '';
         if (!simple && proj) {
             var pc = proj.postVials <= p.reorderThreshold ? 'var(--warning)' : 'var(--success)';
-            projHtml = '<div class="peptide-info-row" style="background:rgba(59,130,246,0.06);border-radius:4px;padding:6px 4px;">' +
+            projHtml = '<div class="peptide-info-row" style="background:var(--bg-primary);border-radius:4px;padding:6px 4px;">' +
                        '<span class="info-label">After Cycle</span>' +
                        '<span class="info-value" style="color:' + pc + '">~' + proj.postVials + ' vials' + (proj.postVials <= p.reorderThreshold ? ' ⚠️' : '') + ' left</span></div>';
         }
@@ -456,7 +483,7 @@ function renderSupply() {
             cycleStripe +
             '<h3><span class="color-dot" style="background:' + pColor + ';"></span>' + eName + (acyc ? ' <span class="status-badge status-cycle">● Active</span>' : '') + '</h3>' +
             '<div class="peptide-info">' +
-            '<div class="peptide-info-row"><span class="info-label">Vials on Hand</span><span class="info-value">' + p.vialsOnHand + ' <span class="status-badge ' + st.cls + '">' + st.txt + '</span></span></div>' +
+            (st ? '<div class="peptide-info-row"><span class="info-label">Vials on Hand</span><span class="info-value">' + p.vialsOnHand + ' <span class="status-badge ' + st.cls + '">' + st.txt + '</span></span></div>' : '') +
             '<div class="peptide-info-row"><span class="info-label">Size</span><span class="info-value">' + p.mgPerVial + ' ' + p.unit + '/vial</span></div>' +
             doseRow + cycleRow +
             '<div class="peptide-info-row"><span class="info-label">Est. Supply</span><span class="info-value">' + sup + '</span></div>' +
@@ -550,6 +577,10 @@ function openEdit(id) {
     editSelectedColor = p.color || PEPTIDE_COLORS[0];
     buildColorPicker('edit-color-picker', function(c) { editSelectedColor = c; }, editSelectedColor);
     buildScheduleUI('edit-sched-container', p.schedule || null);
+    var editIsSimple = (p.trackingMode || 'simple') === 'simple';
+    document.querySelectorAll('#edit-form .edit-full-only').forEach(function(el) {
+        el.style.display = editIsSimple ? 'none' : '';
+    });
     document.getElementById('edit-modal').classList.add('active');
 }
 
@@ -560,7 +591,8 @@ document.getElementById('edit-form').addEventListener('submit', async function(e
     if (!p) return;
     var newDUnit   = document.getElementById('edit-display-unit').value;
     var rawDose    = parseFloat(document.getElementById('edit-dose').value) || 0;
-    p.vialsOnHand      = parseInt(document.getElementById('edit-vials').value);
+    var editSimple = document.getElementById('edit-tracking-mode').value === 'simple';
+    p.vialsOnHand      = editSimple ? (p.vialsOnHand || 0) : (parseInt(document.getElementById('edit-vials').value) || 0);
     p.dailyDose        = (newDUnit === 'mg' && p.unit === 'mg') ? rawDose * 1000 : rawDose;
     p.displayUnit      = (p.unit === 'mg') ? newDUnit : 'mcg';
     p.trackingMode     = document.getElementById('edit-tracking-mode').value || 'simple';
