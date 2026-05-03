@@ -52,9 +52,13 @@ body {
 
 /* ── HEADER ──────────────────────────────────────────────── */
 header {
-    padding:10px 0 14px;
-    border-bottom:1px solid var(--border);
-    margin-bottom:20px;
+    background: var(--accent);
+    /* bleed to page-wrap edges (desktop: 20px padding) */
+    margin: 0 -20px 20px;
+    padding: 10px 20px 14px;
+    border-bottom: none;
+    border-radius: 0 0 16px 16px;
+    box-shadow: 0 4px 18px rgba(220,38,38,0.35);
 }
 .header-row {
     display:flex;
@@ -64,37 +68,39 @@ header {
 header h1 {
     flex:1;
     text-align:center;
-    font-size:1.75rem;
-    font-weight:800;
+    font-size:1.8rem;
+    font-weight:900;
     font-style:italic;
-    color:var(--accent);
-    letter-spacing:-0.02em;
+    color:white;
+    letter-spacing:-0.03em;
     margin:0;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.25);
 }
 .notif-btn-wrap { position:relative; flex-shrink:0; }
 .notif-dot {
     position:absolute; top:-2px; right:-2px;
     width:8px; height:8px;
-    background:var(--accent); border-radius:50%;
+    background: #fde047; border-radius:50%;
+    border: 1.5px solid var(--accent-hover);
     display:none;
 }
 .notif-dot.show { display:block; }
 .icon-btn {
-    background:transparent;
-    border:1px solid var(--border);
-    color:var(--text-secondary);
-    width:28px;
-    height:28px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: white;
+    width:30px;
+    height:30px;
     border-radius:8px;
     cursor:pointer;
-    font-size:0.75rem;
+    font-size:0.82rem;
     display:flex;
     align-items:center;
     justify-content:center;
     transition:all 0.2s;
     flex-shrink:0;
 }
-.icon-btn:hover { border-color:var(--accent); color:var(--accent); }
+.icon-btn:hover { background:rgba(255,255,255,0.28); border-color:white; color:white; }
 
 /* ── NOTIFICATION BANNER ─────────────────────────────────── */
 .notif-banner {
@@ -393,8 +399,8 @@ button {
 
     /* Tighten layout */
     .page-wrap { padding:12px 12px 90px; }
-    header { padding:8px 0 12px; }
-    header h1 { font-size:1.4rem; }
+    header { margin-left:-12px; margin-right:-12px; padding:8px 12px 12px; border-radius:0 0 12px 12px; }
+    header h1 { font-size:1.45rem; }
 
     /* Prevent iOS input zoom (must be 16px) */
     input, select, textarea { font-size:16px; }
