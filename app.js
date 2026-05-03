@@ -303,19 +303,20 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
     e.preventDefault();
     var name = getFormPeptideName();
     if (!name) { alert('Enter a peptide name.'); return; }
-    var unit   = document.getElementById('peptide-unit').value;
-    var mg     = parseFloat(document.getElementById('peptide-mg').value);
-    var vpk    = parseInt(document.getElementById('peptide-vpk').value) || 10;
-    var kits   = parseInt(document.getElementById('kits-on-hand').value) || 1;
+    var unit     = document.getElementById('peptide-unit').value;
+    var isSimple = document.getElementById('peptide-tracking-mode').value === 'simple';
+    var mg       = parseFloat(document.getElementById('peptide-mg').value) || 0;
+    var vpk      = parseInt(document.getElementById('peptide-vpk').value) || 10;
+    var kits     = parseInt(document.getElementById('kits-on-hand').value) || 0;
 
-    if (!mg || mg <= 0) { alert('Enter a valid amount per vial.'); return; }
+    if (!isSimple && (!mg || mg <= 0)) { alert('Enter a valid amount per vial.'); return; }
 
     var dUnit    = document.getElementById('peptide-display-unit').value;
     var rawDose  = parseFloat(document.getElementById('daily-dose').value) || 0;
     var dailyMcg = (dUnit === 'mg' && unit === 'mg') ? rawDose * 1000 : rawDose;
     var p = {
         id: genId(), name: name, mgPerVial: mg, unit: unit, vialsPerKit: vpk,
-        vialsOnHand: kits * vpk,
+        vialsOnHand: isSimple ? 0 : (kits * vpk),
         dailyDose:       dailyMcg,
         displayUnit:     (unit === 'mg') ? dUnit : 'mcg',
         trackingMode:    document.getElementById('peptide-tracking-mode').value || 'simple',
@@ -1040,27 +1041,44 @@ function isScheduledOn(p, dateStr) {
     return false;
 }
 
-function getTodaysSchedule() {
-    var todayStr = new Date().toISOString().split('T')[0];
-    return (appData.peptides || [])
-        .filter(function(p) { return isScheduledOn(p, todayStr); })
-        .map(function(p) {
-            var dose = (appData.doses || []).find(function(d) {
-                return d.peptideId === p.id && d.date === todayStr;
-            });
-            return { peptide: p, taken: !!dose, doseId: dose ? dose.id : null };
+function getScheduleForDay(dateStr) {
+    var items = [];
+    (appData.peptides || []).forEach(function(p) {
+        if (!isScheduledOn(p, dateStr)) return;
+        var sched = p.schedule || {};
+        var times = (sched.times && sched.times.length) ? sched.times : (sched.time ? [sched.time] : ['']);
+        var dosesForDay = (appData.doses || []).filter(function(d) { return d.peptideId === p.id && d.date === dateStr; });
+        times.forEach(function(t, idx) {
+            var dose = dosesForDay[idx] || null;
+            items.push({ peptide: p, time: t, taken: !!dose, doseId: dose ? dose.id : null, slotIndex: idx });
         });
+    });
+    return items;
+}
+
+function getTodaysSchedule() {
+    return getScheduleForDay(new Date().toISOString().split('T')[0]);
 }
 
 function buildScheduleUI(containerId, sched) {
     var container = document.getElementById(containerId);
     if (!container) return;
-    sched = sched || { mode: '', days: [], everyN: 2, time: '' };
+    sched = sched || { mode: '', days: [], everyN: 2, times: [] };
+    // normalise legacy sched.time → sched.times
+    var schedTimes = (sched.times && sched.times.length) ? sched.times : (sched.time ? [sched.time] : ['']);
+    var timesCount = schedTimes.length || 1;
+
     var dayLabels = ['S','M','T','W','T','F','S'];
     var daysHtml = dayLabels.map(function(lbl, i) {
         var active = Array.isArray(sched.days) && sched.days.indexOf(i) > -1;
         return '<button type="button" class="day-chip' + (active ? ' active' : '') + '" data-day="' + i + '">' + lbl + '</button>';
     }).join('');
+
+    var timeInputsHtml = schedTimes.map(function(t) {
+        return '<input type="time" class="sched-time" value="' + (t || '') + '">';
+    }).join('');
+
+    var hasMode = !!sched.mode;
     container.innerHTML =
         '<div class="sched-row">' +
             '<select class="sched-mode">' +
@@ -1076,17 +1094,42 @@ function buildScheduleUI(containerId, sched) {
             '<input type="number" class="sched-everyn" min="2" max="90" value="' + (sched.everyN || 2) + '" style="width:58px;">' +
             '<span style="color:var(--text-secondary);font-size:0.85rem;">days</span>' +
         '</div>' +
-        '<div class="sched-time-row">' +
-            '<label style="color:var(--text-secondary);font-size:0.82rem;">Time (optional)</label>' +
-            '<input type="time" class="sched-time" value="' + (sched.time || '') + '">' +
-        '</div>';
-    var modeEl  = container.querySelector('.sched-mode');
-    var daysRow = container.querySelector('.sched-days-row');
-    var enRow   = container.querySelector('.sched-everyn-row');
+        '<div class="sched-timescount-row" style="display:' + (hasMode ? 'flex' : 'none') + ';">' +
+            '<span style="color:var(--text-secondary);font-size:0.85rem;">Times per day</span>' +
+            '<select class="sched-timescount" style="width:auto;padding:4px 8px;">' +
+                [1,2,3,4].map(function(n) { return '<option value="' + n + '"' + (timesCount === n ? ' selected' : '') + '>' + n + 'x</option>'; }).join('') +
+            '</select>' +
+        '</div>' +
+        '<div class="sched-times-inputs" style="display:' + (hasMode ? 'flex' : 'none') + ';">' + timeInputsHtml + '</div>';
+
+    var modeEl      = container.querySelector('.sched-mode');
+    var daysRow     = container.querySelector('.sched-days-row');
+    var enRow       = container.querySelector('.sched-everyn-row');
+    var tcRow       = container.querySelector('.sched-timescount-row');
+    var timesInputs = container.querySelector('.sched-times-inputs');
+
+    function syncTimeInputs() {
+        var n = parseInt(container.querySelector('.sched-timescount').value) || 1;
+        var existing = Array.from(timesInputs.querySelectorAll('.sched-time')).map(function(el) { return el.value; });
+        timesInputs.innerHTML = '';
+        for (var i = 0; i < n; i++) {
+            var inp = document.createElement('input');
+            inp.type = 'time'; inp.className = 'sched-time';
+            inp.value = existing[i] || '';
+            timesInputs.appendChild(inp);
+        }
+    }
+
     modeEl.addEventListener('change', function() {
-        daysRow.style.display = this.value === 'specificDays' ? 'flex' : 'none';
-        enRow.style.display   = this.value === 'everyN'       ? 'flex' : 'none';
+        var v = this.value;
+        daysRow.style.display = v === 'specificDays' ? 'flex' : 'none';
+        enRow.style.display   = v === 'everyN'       ? 'flex' : 'none';
+        tcRow.style.display   = v ? 'flex' : 'none';
+        timesInputs.style.display = v ? 'flex' : 'none';
+        if (!v) timesInputs.innerHTML = '';
+        else if (!timesInputs.querySelector('.sched-time')) syncTimeInputs();
     });
+    container.querySelector('.sched-timescount').addEventListener('change', syncTimeInputs);
     container.querySelectorAll('.day-chip').forEach(function(chip) {
         chip.addEventListener('click', function() { chip.classList.toggle('active'); });
     });
@@ -1099,13 +1142,14 @@ function readScheduleUI(containerId) {
     if (!modeEl || !modeEl.value) return null;
     var days = [];
     container.querySelectorAll('.day-chip.active').forEach(function(c) { days.push(parseInt(c.dataset.day)); });
-    var enEl   = container.querySelector('.sched-everyn');
-    var timeEl = container.querySelector('.sched-time');
+    var enEl = container.querySelector('.sched-everyn');
+    var times = Array.from(container.querySelectorAll('.sched-time')).map(function(el) { return el.value || ''; });
     return {
         mode:   modeEl.value,
         days:   days,
-        everyN: enEl   ? (parseInt(enEl.value) || 2) : 2,
-        time:   timeEl ? timeEl.value : ''
+        everyN: enEl ? (parseInt(enEl.value) || 2) : 2,
+        times:  times,
+        time:   times[0] || ''
     };
 }
 
@@ -1115,7 +1159,7 @@ var selectedDashDate = null;
 
 function updateGreeting() {
     var h = new Date().getHours();
-    var txt = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    var txt = h < 12 ? 'Good morning ☀️' : h < 17 ? 'Good afternoon 🌤️' : 'Good evening 🌙';
     var el = document.getElementById('dash-greeting-text');
     if (el) el.textContent = txt;
     var de = document.getElementById('dash-today-date');
@@ -1136,27 +1180,29 @@ function renderTodaySchedule() {
         var du   = dispUnit(p);
         var dAmt = dispAmt(p.dailyDose, p);
         var col  = getPeptideColor(p);
-        var timeHint = (p.schedule && p.schedule.time) ? ' · ' + p.schedule.time : '';
+        var times = (p.schedule && p.schedule.times && p.schedule.times.length > 1);
+        var timeHint = item.time ? ' · ' + item.time : '';
+        var slotLabel = times ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
         return '<div class="dash-dose-row">' +
             '<span class="color-dot" style="background:' + col + ';width:10px;height:10px;flex-shrink:0;"></span>' +
             '<div class="dash-dose-info">' +
-                '<span class="dash-dose-name">' + escapeHtml(p.name) + '</span>' +
+                '<span class="dash-dose-name">' + escapeHtml(p.name) + escapeHtml(slotLabel) + '</span>' +
                 '<span class="dash-dose-detail">' + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
             '</div>' +
             (item.taken
                 ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
-                : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="quickLogDose(\'' + p.id + '\')">Take</button>'
+                : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="quickLogDose(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>'
             ) +
         '</div>';
     }).join('');
 }
 
-async function quickLogDose(peptideId) {
+async function quickLogDose(peptideId, scheduledTime) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
     var todayStr = now.toISOString().split('T')[0];
-    var timeStr  = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    var timeStr  = scheduledTime || (String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
     var du       = dispUnit(p);
     var dAmt     = dispAmt(p.dailyDose, p) || 0;
     if (!dAmt) { alert('Set a dose amount for ' + p.name + ' before quick-logging.'); return; }
@@ -1252,17 +1298,51 @@ function selectDashDay(dateStr) {
 }
 
 function renderDashDayDetail(dateStr) {
-    var titleEl  = document.getElementById('dash-day-detail-title');
-    var listEl   = document.getElementById('dash-day-detail-list');
-    var logBtn   = document.getElementById('dash-log-for-day-btn');
+    var titleEl = document.getElementById('dash-day-detail-title');
+    var listEl  = document.getElementById('dash-day-detail-list');
+    var logBtn  = document.getElementById('dash-log-for-day-btn');
     if (!titleEl || !listEl) return;
+
     var d = new Date(dateStr + 'T00:00:00');
     titleEl.textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-    var dd = (appData.doses || []).filter(function(x) { return x.date === dateStr; });
-    if (!dd.length) {
-        listEl.innerHTML = '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">No doses logged this day.</p>';
-    } else {
-        listEl.innerHTML = dd.map(function(dose) {
+
+    var todayStr    = new Date().toISOString().split('T')[0];
+    var isToday     = dateStr === todayStr;
+    var scheduled   = getScheduleForDay(dateStr);
+    var loggedDoses = (appData.doses || []).filter(function(x) { return x.date === dateStr; });
+
+    var html = '';
+
+    if (scheduled.length) {
+        html += '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-secondary);margin-bottom:8px;">Scheduled</div>';
+        html += scheduled.map(function(item) {
+            var p    = item.peptide;
+            var du   = dispUnit(p);
+            var dAmt = dispAmt(p.dailyDose, p);
+            var col  = getPeptideColor(p);
+            var timeHint = item.time ? ' · ' + item.time : '';
+            var multiTimes = p.schedule && p.schedule.times && p.schedule.times.length > 1;
+            var slotLabel  = multiTimes ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
+            var actionHtml = isToday
+                ? (item.taken
+                    ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
+                    : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="quickLogDose(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>')
+                : (item.taken
+                    ? '<span style="color:var(--success);font-size:0.8rem;font-weight:600;">✓</span>'
+                    : '<span style="color:var(--text-secondary);font-size:0.8rem;">—</span>');
+            return '<div class="dash-dose-row">' +
+                '<span class="color-dot" style="background:' + col + ';width:10px;height:10px;flex-shrink:0;"></span>' +
+                '<div class="dash-dose-info">' +
+                    '<span class="dash-dose-name">' + escapeHtml(p.name) + escapeHtml(slotLabel) + '</span>' +
+                    '<span class="dash-dose-detail">' + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
+                '</div>' + actionHtml + '</div>';
+        }).join('');
+        html += '<div style="margin-bottom:14px;"></div>';
+    }
+
+    if (loggedDoses.length) {
+        html += '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-secondary);margin-bottom:8px;">Logged</div>';
+        html += loggedDoses.map(function(dose) {
             var p  = (appData.peptides || []).find(function(x) { return x.id === dose.peptideId; });
             var bg = p ? getPeptideColor(p) : 'var(--accent)';
             var meta = [];
@@ -1280,6 +1360,12 @@ function renderDashDayDetail(dateStr) {
             '</div>';
         }).join('');
     }
+
+    if (!scheduled.length && !loggedDoses.length) {
+        html = '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">No doses scheduled or logged this day.</p>';
+    }
+
+    listEl.innerHTML = html;
     if (logBtn) logBtn.onclick = function() { logAdhocDose(dateStr); };
 }
 
