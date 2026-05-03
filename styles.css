@@ -5,8 +5,8 @@
     --bg-tertiary:  #334155;
     --text-primary: #f8fafc;
     --text-secondary:#94a3b8;
-    --accent:       #3b82f6;
-    --accent-hover: #2563eb;
+    --accent:       #dc2626;
+    --accent-hover: #b91c1c;
     --success:      #22c55e;
     --warning:      #f59e0b;
     --danger:       #ef4444;
@@ -20,11 +20,11 @@
     --bg-tertiary:  #e2e8f0;
     --text-primary: #0f172a;
     --text-secondary:#64748b;
-    --accent:       #2563eb;
-    --accent-hover: #1d4ed8;
+    --accent:       #dc2626;
+    --accent-hover: #b91c1c;
     --success:      #16a34a;
     --warning:      #d97706;
-    --danger:       #dc2626;
+    --danger:       #b91c1c;
     --border:       #cbd5e1;
     --purple:       #7c3aed;
     --shadow:       rgba(0,0,0,0.1);
@@ -45,7 +45,9 @@ body {
 .page-wrap {
     max-width:1400px;
     margin:0 auto;
-    padding:20px 20px 100px; /* bottom pad clears bottom nav on mobile */
+    padding:20px 20px 100px;
+    /* push content below Dynamic Island / status bar */
+    padding-top:max(20px, calc(env(safe-area-inset-top) + 8px));
 }
 
 /* ── HEADER ──────────────────────────────────────────────── */
@@ -57,33 +59,21 @@ header {
     position:relative;
 }
 header h1 {
-    font-size:2.5rem;
+    font-size:2.2rem;
+    font-style:italic;
     margin-bottom:6px;
-    background:linear-gradient(135deg,var(--accent),var(--purple));
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
-    background-clip:text;
+    color:var(--text-primary);
+    letter-spacing:-0.01em;
 }
 header p { color:var(--text-secondary); }
 .header-controls {
     position:absolute;
     top:20px;
-    right:0;
+    left:0;       /* settings icon top-LEFT */
     display:flex;
     gap:10px;
     align-items:center;
 }
-.theme-toggle {
-    background:var(--bg-tertiary);
-    border:1px solid var(--border);
-    color:var(--text-primary);
-    padding:6px 12px;
-    border-radius:20px;
-    cursor:pointer;
-    font-size:0.85rem;
-    transition:all 0.2s;
-}
-.theme-toggle:hover { border-color:var(--accent); }
 .icon-btn {
     background:var(--bg-tertiary);
     border:1px solid var(--border);
@@ -430,8 +420,150 @@ button {
 }
 
 @media (max-width:480px) {
-    header h1 { font-size:1.5rem; }
+    header h1 { font-size:1.4rem; }
     .card { padding:16px; }
     .form-grid { grid-template-columns:1fr; }
     .cycle-stats { grid-template-columns:repeat(2,1fr); }
 }
+
+/* ── MOBILE SAFE-AREA (≤768px) ───────────────────────────── */
+@media (max-width:768px) {
+    .page-wrap { padding: max(12px, calc(env(safe-area-inset-top) + 4px)) 12px 90px; }
+}
+
+/* ── CENTER NAV BUTTON (Dashboard) ──────────────────────── */
+.bnav-center {
+    background:var(--accent);
+    color:white !important;
+    border-radius:14px;
+    margin:-14px 4px 4px;
+    box-shadow:0 -2px 14px rgba(220,38,38,0.45);
+    padding-top:14px;
+    padding-bottom:8px;
+    min-width:54px;
+}
+.bnav-center .bnav-icon { font-size:1.5rem; }
+.bnav-center .bnav-label { color:rgba(255,255,255,0.9); }
+.bnav-center.active { color:white !important; }
+.bnav-center:hover { opacity:0.88; }
+
+/* ── DASHBOARD ───────────────────────────────────────────── */
+.dash-greeting {
+    text-align:center;
+    padding:10px 0 16px;
+}
+.dash-app-name {
+    font-size:0.82rem;
+    font-style:italic;
+    color:var(--text-secondary);
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin-bottom:4px;
+}
+.dash-hello {
+    font-size:1.6rem;
+    font-weight:700;
+    color:var(--text-primary);
+}
+.dash-today-header {
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:12px;
+    flex-wrap:wrap;
+    gap:6px;
+}
+.dash-today-header h2 { margin-bottom:0; font-size:1.1rem; }
+.dash-today-date { font-size:0.82rem; color:var(--text-secondary); }
+.dash-dose-row {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--border);
+}
+.dash-dose-row:last-child { border-bottom:none; }
+.dash-dose-info { flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.dash-dose-name { font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dash-dose-detail { font-size:0.78rem; color:var(--text-secondary); }
+.dash-take-btn {
+    padding:6px 14px;
+    font-size:0.8rem;
+    border-radius:20px;
+    background:transparent;
+    border:1.5px solid var(--border);
+    color:var(--text-secondary);
+    cursor:pointer;
+    font-weight:600;
+    white-space:nowrap;
+    transition:all 0.15s;
+    flex-shrink:0;
+}
+.dash-take-btn:hover { opacity:0.8; }
+.dash-taken {
+    background:rgba(34,197,94,0.12);
+    border-color:var(--success);
+    color:var(--success);
+}
+.dash-adhoc-row {
+    padding:10px 0 0;
+    margin-top:4px;
+    border-top:1px dashed var(--border);
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+/* ── CALENDAR: SELECTED DAY ──────────────────────────────── */
+.cal-day.selected-day {
+    background:rgba(220,38,38,0.08);
+    border-color:var(--accent);
+}
+
+/* ── CYCLE STRIPE ────────────────────────────────────────── */
+.peptide-card { overflow:hidden; }
+.cycle-stripe {
+    margin:-18px -18px 14px;
+    padding:7px 16px;
+    font-size:0.78rem;
+    font-weight:700;
+    text-align:center;
+    cursor:pointer;
+    letter-spacing:0.03em;
+    color:white;
+    transition:opacity 0.15s;
+    user-select:none;
+}
+.cycle-stripe:hover { opacity:0.85; }
+.cycle-stripe-start {
+    background:var(--bg-primary) !important;
+    color:var(--text-secondary);
+    border-bottom:1px dashed var(--border);
+    font-weight:500;
+}
+
+/* ── SCHEDULE BUILDER ────────────────────────────────────── */
+.sched-container {
+    background:var(--bg-primary);
+    border-radius:8px;
+    padding:12px;
+    border:1px solid var(--border);
+    margin-top:4px;
+}
+.sched-row { margin-bottom:10px; }
+.sched-days-row { display:flex; gap:6px; margin:10px 0 6px; flex-wrap:wrap; }
+.sched-everyn-row { display:flex; align-items:center; gap:8px; margin:10px 0 6px; }
+.day-chip {
+    width:34px; height:34px;
+    border-radius:50%;
+    border:1.5px solid var(--border);
+    background:transparent;
+    color:var(--text-secondary);
+    font-size:0.78rem; font-weight:700;
+    cursor:pointer; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s;
+    min-height:34px;
+}
+.day-chip.active { background:var(--accent); border-color:var(--accent); color:white; }
+.sched-time-row { margin-top:10px; display:flex; flex-direction:column; gap:4px; }
