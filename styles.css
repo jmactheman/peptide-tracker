@@ -279,12 +279,16 @@ button {
 .calendar-nav { display:flex; gap:8px; align-items:center; }
 .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
 .cal-day-header { text-align:center; padding:10px; color:var(--text-secondary); font-weight:600; font-size:0.82rem; }
-.cal-day { min-height:90px; background:var(--bg-secondary); border-radius:6px; padding:6px; border:1px solid var(--border); }
+.cal-day { min-height:90px; background:var(--bg-secondary); border-radius:6px; padding:6px; border:1px solid var(--border); cursor:pointer; transition:background 0.15s; }
+.cal-day:not(.other-month):hover { background:var(--bg-tertiary); }
 .cal-day.other-month { opacity:0.35; }
 .cal-day.today { border-color:var(--accent); box-shadow:0 0 0 1px rgba(59,130,246,0.3); }
 .cal-day-num { font-weight:600; margin-bottom:4px; color:var(--text-secondary); font-size:0.85rem; }
 .cal-day.today .cal-day-num { color:var(--accent); }
 .cal-dose { font-size:0.65rem; padding:2px 5px; border-radius:3px; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:white; }
+.cal-dots-row { display:none; gap:3px; align-items:center; flex-wrap:wrap; margin-top:3px; }
+.cal-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.cal-dot-badge { font-size:0.6rem; color:var(--text-secondary); font-weight:700; line-height:1; }
 
 /* ── GANTT / CYCLES ──────────────────────────────────────── */
 .cycle-controls { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
@@ -403,9 +407,10 @@ button {
     /* Supply grid: single column */
     .supply-grid { grid-template-columns:1fr; }
 
-    /* Calendar: compact */
+    /* Calendar: compact, swap text chips → dots */
     .cal-day { min-height:55px; padding:3px; }
-    .cal-dose { font-size:0.58rem; }
+    .cal-dose { display:none; }
+    .cal-dots-row { display:flex; }
 
     /* Gantt: narrower labels */
     .gantt-label-col,.gantt-row-label { width:120px; }
