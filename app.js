@@ -850,7 +850,7 @@ document.getElementById('dose-peptide').addEventListener('change', function() {
         var u  = p.syringeType === 'U50' ? ri.syringeU50 : ri.syringeU100;
         cnt.innerHTML = '<div class="dose-calc">' +
             '<p><strong>' + escapeHtml(p.name) + '</strong> — Active vial</p>' +
-            '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> for ' + p.dailyDose + ' ' + du + '</p>' +
+            '<p>Draw <span class="highlight">' + ri.mlPerDose.toFixed(3) + ' mL</span> for ' + dispAmt(p.dailyDose, p) + ' ' + du + '</p>' +
             '<p>' + lb + ': <span class="highlight">' + u.toFixed(1) + ' units</span> &nbsp;|&nbsp; U-100: ' + ri.syringeU100.toFixed(1) + ' | U-50: ' + ri.syringeU50.toFixed(1) + '</p>' +
             '<p>Remaining: ' + ri.remainingUnits.toFixed(1) + ' ' + du + ' (' + ri.dosesRemaining + ' doses)</p></div>';
     } else {
