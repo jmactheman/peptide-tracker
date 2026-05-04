@@ -51,6 +51,10 @@ function escapeHtml(s) {
 function fmtDate(s) {
     return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 }
+function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function fmtDateShort(d) {
     return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
 }
@@ -636,7 +640,7 @@ function startCycle(peptideId, date) {
     if (p.cycleDuration) {
         var d = new Date(date + 'T00:00:00');
         d.setDate(d.getDate() + p.cycleDuration * 7);
-        ped = d.toISOString().split('T')[0];
+        ped = localDateStr(d);
     }
     var cycle = {
         id: genId(), peptideId: peptideId, peptideName: p.name,
@@ -652,7 +656,7 @@ async function endCycle(cycleId) {
     var cycle = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
     if (!cycle) return;
     cycle.status  = 'completed';
-    cycle.endDate = new Date().toISOString().split('T')[0];
+    cycle.endDate = localDateStr();
     // Note: vials are already decremented per-dose via reconstituted.remainingUnits / finishVial.
     // Do NOT double-decrement here.
     try { await dbPut('cycles', cycle); } catch(err) { alert('Save failed: ' + err.message); return; }
@@ -1081,7 +1085,7 @@ async function deleteDose(id) {
     renderHistory();
     renderTodaySchedule();
     renderDashCalendar();
-    renderDashDayDetail(selectedDashDate || new Date().toISOString().split('T')[0]);
+    renderDashDayDetail(selectedDashDate || localDateStr());
 }
 
 function exportCSV() {
@@ -1097,7 +1101,7 @@ function dlCSV(rows, name) {
     var blob = new Blob([rows.map(function(r) { return r.join(','); }).join('\n')], { type:'text/csv' });
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
-    a.href = url; a.download = name + '-' + new Date().toISOString().split('T')[0] + '.csv';
+    a.href = url; a.download = name + '-' + localDateStr() + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
@@ -1156,7 +1160,7 @@ function renderCalendar() {
 // Dashboard calendar nav
 document.getElementById('dash-prev-month').addEventListener('click', function() { dashCalDate.setMonth(dashCalDate.getMonth() - 1); renderDashCalendar(); });
 document.getElementById('dash-next-month').addEventListener('click', function() { dashCalDate.setMonth(dashCalDate.getMonth() + 1); renderDashCalendar(); });
-document.getElementById('dash-today-btn').addEventListener('click', function() { dashCalDate = new Date(); selectDashDay(new Date().toISOString().split('T')[0]); });
+document.getElementById('dash-today-btn').addEventListener('click', function() { dashCalDate = new Date(); selectDashDay(localDateStr()); });
 
 // ── SCHEDULING ────────────────────────────────────────────────
 function isScheduledOn(p, dateStr) {
@@ -1192,7 +1196,7 @@ function getScheduleForDay(dateStr) {
 }
 
 function getTodaysSchedule() {
-    return getScheduleForDay(new Date().toISOString().split('T')[0]);
+    return getScheduleForDay(localDateStr());
 }
 
 function buildScheduleUI(containerId, sched) {
@@ -1304,7 +1308,7 @@ function updateGreeting() {
 function renderTodaySchedule() {
     var container = document.getElementById('dash-today-list');
     if (!container) return;
-    var todayStr = new Date().toISOString().split('T')[0];
+    var todayStr = localDateStr();
     var scheduled = getTodaysSchedule();
     if (!scheduled.length) {
         container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">No doses scheduled today. Add a schedule via Supply → Edit.</p>';
@@ -1336,7 +1340,7 @@ async function quickLogDose(peptideId, scheduledTime) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
-    var todayStr = now.toISOString().split('T')[0];
+    var todayStr = localDateStr(now);
     var timeStr  = scheduledTime || (String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
     var du       = dispUnit(p);
     var dAmt     = dispAmt(p.dailyDose, p) || 0;
@@ -1373,12 +1377,12 @@ async function undoQuickLog(doseId) {
     try { await dbDelete('doses', doseId); } catch(e) { alert('Failed: ' + e.message); return; }
     renderTodaySchedule();
     renderDashCalendar();
-    renderDashDayDetail(selectedDashDate || new Date().toISOString().split('T')[0]);
+    renderDashDayDetail(selectedDashDate || localDateStr());
     renderHistory();
 }
 
 function logAdhocDose(dateStr) {
-    var d = dateStr || new Date().toISOString().split('T')[0];
+    var d = dateStr || localDateStr();
     document.getElementById('dose-date').value = d;
     switchTab('tracking');
 }
@@ -1393,7 +1397,7 @@ function renderDashCalendar() {
     var dim   = new Date(year, month + 1, 0).getDate();
     var pl    = new Date(year, month, 0).getDate();
     var today = new Date(); today.setHours(0,0,0,0);
-    var selStr = selectedDashDate || today.toISOString().split('T')[0];
+    var selStr = selectedDashDate || localDateStr(today);
     var html = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
         .map(function(d) { return '<div class="cal-day-header">' + d + '</div>'; }).join('');
     for (var i = fd - 1; i >= 0; i--) html += '<div class="cal-day other-month"><div class="cal-day-num">' + (pl - i) + '</div></div>';
@@ -1441,7 +1445,7 @@ function renderDashDayDetail(dateStr) {
     var d = new Date(dateStr + 'T00:00:00');
     titleEl.textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
 
-    var todayStr    = new Date().toISOString().split('T')[0];
+    var todayStr    = localDateStr();
     var isToday     = dateStr === todayStr;
     var scheduled   = getScheduleForDay(dateStr);
     var loggedDoses = (appData.doses || []).filter(function(x) { return x.date === dateStr; });
@@ -1508,11 +1512,11 @@ function renderDashboard() {
     updateGreeting();
     renderTodaySchedule();
     renderDashCalendar();
-    renderDashDayDetail(selectedDashDate || new Date().toISOString().split('T')[0]);
+    renderDashDayDetail(selectedDashDate || localDateStr());
 }
 
 function startCycleManual(peptideId) {
-    var todayStr = new Date().toISOString().split('T')[0];
+    var todayStr = localDateStr();
     startCycle(peptideId, todayStr);
     renderSupply();
     renderCycles();
@@ -1622,7 +1626,7 @@ async function backupData() {
     var blob = new Blob([JSON.stringify(backup, null, 2)], { type:'application/json' });
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
-    a.href = url; a.download = 'peptide-tracker-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    a.href = url; a.download = 'peptide-tracker-backup-' + localDateStr() + '.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
