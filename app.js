@@ -1322,11 +1322,13 @@ function renderTodaySchedule() {
         var times = (p.schedule && p.schedule.times && p.schedule.times.length > 1);
         var timeHint = item.time ? ' · ' + item.time : '';
         var slotLabel = times ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
+        var ri = calcReconInfo(p);
+        var unitsHint = (ri && p.dailyDose) ? '<span style="color:' + col + ';font-weight:700;">' + ri.units.toFixed(1) + ' units</span> · ' : '';
         return '<div class="dash-dose-row">' +
             '<span class="color-dot" style="background:' + col + ';width:10px;height:10px;flex-shrink:0;"></span>' +
             '<div class="dash-dose-info">' +
                 '<span class="dash-dose-name">' + escapeHtml(p.name) + escapeHtml(slotLabel) + '</span>' +
-                '<span class="dash-dose-detail">' + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
+                '<span class="dash-dose-detail">' + unitsHint + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
             '</div>' +
             (item.taken
                 ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
@@ -1462,6 +1464,8 @@ function renderDashDayDetail(dateStr) {
             var timeHint = item.time ? ' · ' + item.time : '';
             var multiTimes = p.schedule && p.schedule.times && p.schedule.times.length > 1;
             var slotLabel  = multiTimes ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
+            var ri2 = calcReconInfo(p);
+            var unitsHint2 = (ri2 && p.dailyDose) ? '<span style="color:' + col + ';font-weight:700;">' + ri2.units.toFixed(1) + ' units</span> · ' : '';
             var actionHtml = isToday
                 ? (item.taken
                     ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
@@ -1473,7 +1477,7 @@ function renderDashDayDetail(dateStr) {
                 '<span class="color-dot" style="background:' + col + ';width:10px;height:10px;flex-shrink:0;"></span>' +
                 '<div class="dash-dose-info">' +
                     '<span class="dash-dose-name">' + escapeHtml(p.name) + escapeHtml(slotLabel) + '</span>' +
-                    '<span class="dash-dose-detail">' + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
+                    '<span class="dash-dose-detail">' + unitsHint2 + (dAmt || '—') + ' ' + du + timeHint + '</span>' +
                 '</div>' + actionHtml + '</div>';
         }).join('');
         html += '<div style="margin-bottom:14px;"></div>';
