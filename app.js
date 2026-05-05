@@ -13,6 +13,10 @@ var selectedColor     = PEPTIDE_COLORS[0];
 var editSelectedColor = PEPTIDE_COLORS[0];
 var bodyView          = 'front';
 
+var sitePickerPeptideId    = null;
+var sitePickerTime         = null;
+var sitePickerSelectedSite = null;
+
 async function loadAllData() {
     appData.peptides  = await dbGetAll('peptides');
     appData.doses     = await dbGetAll('doses');
@@ -908,6 +912,13 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
     document.getElementById('dose-notes').value       = '';
     document.getElementById('log-dose-label').textContent = 'Dose *';
     document.getElementById('quick-reference').style.display = 'none';
+    var siteDisp = document.getElementById('selected-site-display');
+    if (siteDisp) siteDisp.textContent = 'No site selected';
+    var confirmBanner = document.getElementById('log-dose-confirm');
+    if (confirmBanner) {
+        confirmBanner.style.display = 'block';
+        setTimeout(function() { confirmBanner.style.display = 'none'; }, 2500);
+    }
     checkLowStockNotification();
 });
 
@@ -932,13 +943,15 @@ var BODY_SITE_POSITIONS = {
     }
 };
 
-function toggleBodyView(v) {
+function toggleBodyView(v, containerId, callbackFn) {
     bodyView = v;
-    renderSiteRotation();
+    renderSiteRotation(containerId, callbackFn);
 }
 
-function renderSiteRotation() {
-    var grid = document.getElementById('rotation-grid');
+function renderSiteRotation(containerId, callbackFn) {
+    containerId = containerId || 'rotation-grid';
+    callbackFn  = callbackFn  || 'selectSiteFromBody';
+    var grid = document.getElementById(containerId);
     if (!grid) return;
 
     // Sort doses newest-first; index 0 = most recent
@@ -981,7 +994,7 @@ function renderSiteRotation() {
         var p = positions[site]; if (!p) return '';
         var c = colorFor(site);
         var isNext = (site === next);
-        return '<g class="body-site' + (isNext ? ' next-pulse' : '') + '" data-site="' + escapeHtml(site) + '" onclick="selectSiteFromBody(\'' + site.replace(/'/g, "\\'") + '\')">' +
+        return '<g class="body-site' + (isNext ? ' next-pulse' : '') + '" data-site="' + escapeHtml(site) + '" onclick="' + callbackFn + '(\'' + site.replace(/'/g, "\\'") + '\')">' +
             '<circle cx="' + p.x + '" cy="' + p.y + '" r="11" fill="' + c + '" stroke="var(--bg-secondary)" stroke-width="2.5"/>' +
             '<title>' + escapeHtml(site) + ' — ' + labelFor(site) + '</title>' +
             '</g>';
@@ -1026,8 +1039,8 @@ function renderSiteRotation() {
     var iF = bodyView === 'front';
     var toggle =
         '<div class="body-view-toggle">' +
-            '<button class="body-view-btn' + (iF ? ' active' : '') + '" onclick="toggleBodyView(\'front\')">Front</button>' +
-            '<button class="body-view-btn' + (!iF ? ' active' : '') + '" onclick="toggleBodyView(\'back\')">Back</button>' +
+            '<button class="body-view-btn' + (iF ? ' active' : '') + '" onclick="toggleBodyView(\'front\',\'' + containerId + '\',\'' + callbackFn + '\')">Front</button>' +
+            '<button class="body-view-btn' + (!iF ? ' active' : '') + '" onclick="toggleBodyView(\'back\',\'' + containerId + '\',\'' + callbackFn + '\')">Back</button>' +
         '</div>';
 
     var legend =
@@ -1045,13 +1058,23 @@ function renderSiteRotation() {
 }
 
 function selectSiteFromBody(site) {
-    var sel = document.getElementById('injection-site');
-    if (sel) {
-        sel.value = site;
-        sel.dispatchEvent(new Event('change'));
-    }
-    document.querySelectorAll('.body-site').forEach(function(g) { g.classList.remove('selected'); });
-    var picked = document.querySelector('.body-site[data-site="' + site.replace(/"/g, '\\"') + '"]');
+    var inp = document.getElementById('injection-site');
+    if (inp) inp.value = site;
+    var lbl = document.getElementById('selected-site-display');
+    if (lbl) lbl.textContent = site;
+    document.querySelectorAll('#rotation-grid .body-site').forEach(function(g) { g.classList.remove('selected'); });
+    var picked = document.querySelector('#rotation-grid .body-site[data-site="' + site.replace(/"/g, '\\"') + '"]');
+    if (picked) picked.classList.add('selected');
+}
+
+function selectSiteForModal(site) {
+    sitePickerSelectedSite = site;
+    var lbl = document.getElementById('site-picker-selected-display');
+    if (lbl) lbl.textContent = site;
+    var btn = document.getElementById('site-picker-log-btn');
+    if (btn) btn.disabled = false;
+    document.querySelectorAll('#site-picker-grid .body-site').forEach(function(g) { g.classList.remove('selected'); });
+    var picked = document.querySelector('#site-picker-grid .body-site[data-site="' + site.replace(/"/g, '\\"') + '"]');
     if (picked) picked.classList.add('selected');
 }
 
@@ -1072,7 +1095,10 @@ function renderHistory(filter) {
                '<td>' + d.amount + ' ' + (d.unit || 'mcg') + '</td>' +
                '<td>' + escapeHtml(d.site || '-') + '</td>' +
                '<td style="font-size:0.8rem;color:var(--text-secondary);max-width:160px;">' + escapeHtml(d.notes || '') + '</td>' +
-               '<td><button class="btn-danger btn-small" onclick="deleteDose(\'' + d.id + '\')">🗑️</button></td></tr>';
+               '<td style="white-space:nowrap;">' +
+               '<button class="btn-ghost btn-small" onclick="openEditDoseModal(\'' + d.id + '\')" title="Edit">✏️</button> ' +
+               '<button class="btn-danger btn-small" onclick="deleteDose(\'' + d.id + '\')" title="Delete">🗑️</button>' +
+               '</td></tr>';
     }).join('');
 }
 
@@ -1167,7 +1193,8 @@ function isScheduledOn(p, dateStr) {
     if (!p.schedule || !p.schedule.mode) return false;
     var d   = new Date(dateStr + 'T00:00:00');
     var dow = d.getDay(); // 0=Sun
-    if (p.schedule.mode === 'daily') return true;
+    if (p.schedule.mode === 'daily')  return true;
+    if (p.schedule.mode === 'random') return true;
     if (p.schedule.mode === 'specificDays') {
         return Array.isArray(p.schedule.days) && p.schedule.days.indexOf(dow) > -1;
     }
@@ -1225,6 +1252,7 @@ function buildScheduleUI(containerId, sched) {
                 '<option value="daily"'         + (sched.mode === 'daily'        ? ' selected' : '') + '>Daily</option>' +
                 '<option value="specificDays"'  + (sched.mode === 'specificDays' ? ' selected' : '') + '>Specific days</option>' +
                 '<option value="everyN"'        + (sched.mode === 'everyN'       ? ' selected' : '') + '>Every N days</option>' +
+                '<option value="random"'        + (sched.mode === 'random'       ? ' selected' : '') + '>Random / as needed</option>' +
             '</select>' +
         '</div>' +
         '<div class="sched-days-row" style="display:' + (sched.mode === 'specificDays' ? 'flex' : 'none') + ';">' + daysHtml + '</div>' +
@@ -1319,8 +1347,9 @@ function renderTodaySchedule() {
         var du   = dispUnit(p);
         var dAmt = dispAmt(p.dailyDose, p);
         var col  = getPeptideColor(p);
+        var isRandom  = p.schedule && p.schedule.mode === 'random';
         var times = (p.schedule && p.schedule.times && p.schedule.times.length > 1);
-        var timeHint = item.time ? ' · ' + item.time : '';
+        var timeHint = isRandom ? ' · as needed' : (item.time ? ' · ' + item.time : '');
         var slotLabel = times ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
         var ri = calcReconInfo(p);
         var unitsHint = (ri && p.dailyDose) ? '<span style="color:' + col + ';font-weight:700;">' + ri.units.toFixed(1) + ' units</span> · ' : '';
@@ -1332,13 +1361,34 @@ function renderTodaySchedule() {
             '</div>' +
             (item.taken
                 ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
-                : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="quickLogDose(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>'
+                : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="showSitePickerModal(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>'
             ) +
         '</div>';
     }).join('');
 }
 
-async function quickLogDose(peptideId, scheduledTime) {
+function showSitePickerModal(peptideId, scheduledTime) {
+    var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
+    if (!p) return;
+    sitePickerPeptideId    = peptideId;
+    sitePickerTime         = scheduledTime;
+    sitePickerSelectedSite = null;
+    var title = document.getElementById('site-picker-title');
+    if (title) title.textContent = '💉 ' + p.name + ' — Choose Site';
+    var lbl = document.getElementById('site-picker-selected-display');
+    if (lbl) lbl.textContent = 'Tap a site on the diagram';
+    var btn = document.getElementById('site-picker-log-btn');
+    if (btn) btn.disabled = true;
+    document.getElementById('site-picker-modal').classList.add('active');
+    renderSiteRotation('site-picker-grid', 'selectSiteForModal');
+}
+
+async function confirmSitePickerLog() {
+    closeModal('site-picker-modal');
+    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite);
+}
+
+async function quickLogDose(peptideId, scheduledTime, site) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
@@ -1362,7 +1412,7 @@ async function quickLogDose(peptideId, scheduledTime) {
         id: genId(), peptideId: p.id, peptideName: p.name,
         date: todayStr, time: timeStr,
         amount: dAmt, unit: du,
-        site: null, notes: null, loggedAt: now.toISOString()
+        site: site || null, notes: null, loggedAt: now.toISOString()
     };
     try { await dbPut('doses', dose); appData.doses.push(dose); } catch(e) { alert('Save failed: ' + e.message); return; }
     renderTodaySchedule();
@@ -1370,6 +1420,7 @@ async function quickLogDose(peptideId, scheduledTime) {
     renderDashDayDetail(selectedDashDate || todayStr);
     renderHistory();
     renderSupply();
+    renderSiteRotation();
     checkLowStockNotification();
 }
 
@@ -1461,7 +1512,8 @@ function renderDashDayDetail(dateStr) {
             var du   = dispUnit(p);
             var dAmt = dispAmt(p.dailyDose, p);
             var col  = getPeptideColor(p);
-            var timeHint = item.time ? ' · ' + item.time : '';
+            var isRandom2  = p.schedule && p.schedule.mode === 'random';
+            var timeHint = isRandom2 ? ' · as needed' : (item.time ? ' · ' + item.time : '');
             var multiTimes = p.schedule && p.schedule.times && p.schedule.times.length > 1;
             var slotLabel  = multiTimes ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
             var ri2 = calcReconInfo(p);
@@ -1469,7 +1521,7 @@ function renderDashDayDetail(dateStr) {
             var actionHtml = isToday
                 ? (item.taken
                     ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
-                    : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="quickLogDose(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>')
+                    : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="showSitePickerModal(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>')
                 : (item.taken
                     ? '<span style="color:var(--success);font-size:0.8rem;font-weight:600;">✓</span>'
                     : '<span style="color:var(--text-secondary);font-size:0.8rem;">—</span>');
@@ -1499,7 +1551,10 @@ function renderDashDayDetail(dateStr) {
                     '<div style="font-size:0.78rem;color:var(--text-secondary);">' + dose.amount + ' ' + (dose.unit || 'mcg') +
                     (meta.length ? ' · ' + meta.join(' · ') : '') + '</div>' +
                 '</div>' +
-                '<button class="btn-danger btn-small" onclick="deleteDose(\'' + dose.id + '\')">🗑️</button>' +
+                '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+                '<button class="btn-ghost btn-small" onclick="openEditDoseModal(\'' + dose.id + '\')" title="Edit">✏️</button>' +
+                '<button class="btn-danger btn-small" onclick="deleteDose(\'' + dose.id + '\')" title="Delete">🗑️</button>' +
+                '</div>' +
             '</div>';
         }).join('');
     }
@@ -1613,6 +1668,44 @@ async function deleteProtocol(id) {
     try { await dbDelete('protocols', id); } catch(err) { alert('Delete failed: ' + err.message); }
     renderProtocolTemplatesList();
 }
+
+// ── DOSE EDITING ──────────────────────────────────────────────
+function openEditDoseModal(doseId) {
+    var dose = (appData.doses || []).find(function(d) { return d.id === doseId; });
+    if (!dose) return;
+    document.getElementById('edit-dose-id').value     = doseId;
+    document.getElementById('edit-dose-date').value   = dose.date  || '';
+    document.getElementById('edit-dose-time').value   = dose.time  || '';
+    document.getElementById('edit-dose-amount').value = dose.amount || '';
+    document.getElementById('edit-dose-site').value   = dose.site  || '';
+    document.getElementById('edit-dose-notes').value  = dose.notes || '';
+    var p = (appData.peptides || []).find(function(x) { return x.id === dose.peptideId; });
+    var unit = p ? dispUnit(p) : (dose.unit || 'mcg');
+    document.getElementById('edit-dose-amount-label').textContent = 'Dose (' + unit + ') *';
+    document.getElementById('edit-dose-modal').classList.add('active');
+}
+
+document.getElementById('edit-dose-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var doseId = document.getElementById('edit-dose-id').value;
+    var idx = (appData.doses || []).findIndex(function(d) { return d.id === doseId; });
+    if (idx === -1) return;
+    var dose = Object.assign({}, appData.doses[idx]);
+    dose.date   = document.getElementById('edit-dose-date').value;
+    dose.time   = document.getElementById('edit-dose-time').value  || null;
+    dose.amount = parseFloat(document.getElementById('edit-dose-amount').value);
+    dose.site   = document.getElementById('edit-dose-site').value  || null;
+    dose.notes  = document.getElementById('edit-dose-notes').value.trim() || null;
+    try { await dbPut('doses', dose); } catch(err) { alert('Save failed: ' + err.message); return; }
+    appData.doses[idx] = dose;
+    closeModal('edit-dose-modal');
+    renderHistory();
+    renderDashCalendar();
+    renderDashDayDetail(selectedDashDate || localDateStr());
+    renderTodaySchedule();
+    renderSupply();
+    renderSiteRotation();
+});
 
 // ── MODALS ────────────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
