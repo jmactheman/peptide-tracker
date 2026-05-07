@@ -926,20 +926,20 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
 // Site coordinates on the body SVG (200×400 viewBox) — split by view
 var BODY_SITE_POSITIONS = {
     front: {
-        'Deltoid - Left':  { x:  46, y:  98 },
-        'Deltoid - Right': { x: 154, y:  98 },
-        'Abdomen - Left':  { x:  84, y: 168 },
-        'Abdomen - Right': { x: 116, y: 168 },
-        'Thigh - Left':    { x:  82, y: 300 },
-        'Thigh - Right':   { x: 118, y: 300 }
+        'Deltoid - Left':  { x: 136, y:  58 },
+        'Deltoid - Right': { x:  93, y:  58 },
+        'Abdomen - Left':  { x: 126, y: 100 },
+        'Abdomen - Right': { x: 104, y: 100 },
+        'Thigh - Left':    { x: 136, y: 152 },
+        'Thigh - Right':   { x:  94, y: 152 }
     },
     back: {
-        'Deltoid - Left':  { x:  46, y:  98 },
-        'Deltoid - Right': { x: 154, y:  98 },
-        'Glute - Left':    { x:  78, y: 225 },
-        'Glute - Right':   { x: 122, y: 225 },
-        'Thigh - Left':    { x:  82, y: 300 },
-        'Thigh - Right':   { x: 118, y: 300 }
+        'Deltoid - Left':  { x:  54, y:  58 },
+        'Deltoid - Right': { x:  96, y:  58 },
+        'Glute - Left':    { x:  50, y: 133 },
+        'Glute - Right':   { x: 100, y: 133 },
+        'Thigh - Left':    { x:  55, y: 160 },
+        'Thigh - Right':   { x:  95, y: 160 }
     }
 };
 
@@ -995,44 +995,14 @@ function renderSiteRotation(containerId, callbackFn) {
         var c = colorFor(site);
         var isNext = (site === next);
         return '<g class="body-site' + (isNext ? ' next-pulse' : '') + '" data-site="' + escapeHtml(site) + '" onclick="' + callbackFn + '(\'' + site.replace(/'/g, "\\'") + '\')">' +
-            '<circle cx="' + p.x + '" cy="' + p.y + '" r="11" fill="' + c + '" stroke="var(--bg-secondary)" stroke-width="2.5"/>' +
+            '<circle cx="' + p.x + '" cy="' + p.y + '" r="9" fill="' + c + '" stroke="var(--bg-secondary)" stroke-width="2"/>' +
             '<title>' + escapeHtml(site) + ' — ' + labelFor(site) + '</title>' +
             '</g>';
     }).join('');
 
-    var isFront = bodyView === 'front';
-
-    // Front silhouette paths
-    var frontPaths =
-        '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
-        '<circle cx="91" cy="36" r="3" fill="currentColor" fill-opacity="0.2"/>' +
-        '<circle cx="109" cy="36" r="3" fill="currentColor" fill-opacity="0.2"/>' +
-        '<path d="M 96 44 Q 100 48 104 44" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.25"/>';
-
-    // Back silhouette — back of head with spine indicator
-    var backPaths =
-        '<circle cx="100" cy="40" r="22" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.8"/>' +
-        '<line x1="100" y1="72" x2="100" y2="205" stroke="currentColor" stroke-width="1.2" opacity="0.18" stroke-dasharray="4,3"/>';
-
     var bodySvg =
-        '<svg class="body-svg" viewBox="0 0 200 400" xmlns="http://www.w3.org/2000/svg">' +
-            (isFront ? frontPaths : backPaths) +
-            // Neck
-            '<rect x="93" y="60" width="14" height="12" fill="currentColor" opacity="0.12"/>' +
-            // Torso
-            '<path d="M 55 78 L 145 78 L 138 205 L 62 205 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
-            // Left arm
-            '<path d="M 55 78 L 30 92 L 24 200 L 40 205 L 50 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
-            // Right arm
-            '<path d="M 145 78 L 170 92 L 176 200 L 160 205 L 150 95 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
-            // Pelvis / glute area (back view gets rounder shape)
-            (isFront
-                ? '<path d="M 62 205 L 138 205 L 145 250 L 55 250 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>'
-                : '<path d="M 62 205 L 138 205 Q 148 240 138 255 L 62 255 Q 52 240 62 205 Z" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1.5"/>') +
-            // Left leg
-            '<path d="M 60 250 L 96 250 L 92 380 L 64 380 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
-            // Right leg
-            '<path d="M 104 250 L 140 250 L 136 380 L 108 380 Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+        '<svg class="body-svg" viewBox="0 0 200 267" xmlns="http://www.w3.org/2000/svg">' +
+            '<image href="silhouette-' + bodyView + '.png" x="0" y="0" width="200" height="267" preserveAspectRatio="xMidYMid meet"/>' +
             dotsSvg +
         '</svg>';
 
