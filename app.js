@@ -1021,7 +1021,6 @@ function renderSiteRotation(containerId, callbackFn) {
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--warning);"></span><span>Used recently</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--text-secondary);"></span><span>3+ doses ago</span></div>' +
             '<div class="body-legend-row"><span class="body-dot-legend" style="background:var(--bg-tertiary);border:1px solid var(--border);"></span><span>Never used</span></div>' +
-            '<div class="body-tip">Tap a site to log it.</div>' +
         '</div>';
 
     grid.innerHTML = toggle + '<div class="body-diagram-row">' + bodySvg + legend + '</div>';
