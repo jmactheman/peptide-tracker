@@ -1,6 +1,6 @@
 'use strict';
 
-var CACHE = 'pepbros-v16';
+var CACHE = 'pepbros-v17';
 var ASSETS = [
     '/peptide-tracker/',
     '/peptide-tracker/index.html',

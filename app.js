@@ -1061,6 +1061,29 @@ function ldFormatRegionSide(site) {
     return { region: region, side: side, abbrev: abbrev };
 }
 
+// Recompute the inline "X units" readout based on the current dose-amount input.
+// Called on initial render AND on every keystroke in the amount input.
+function ldRecalcUnits() {
+    var readout = document.getElementById('ld-units-readout');
+    if (!readout) return;
+    var p = (appData.peptides || []).find(function(x) { return x.id === logDoseState.peptideId; });
+    var amtEl = document.getElementById('dose-amount');
+    var amtVal = amtEl ? parseFloat(amtEl.value) : NaN;
+    if (!p || !p.reconstituted || isNaN(amtVal) || amtVal <= 0) {
+        readout.textContent = '— units';
+        return;
+    }
+    // Build a transient peptide with the user's typed dose, in mcg, then reuse calcReconInfo
+    var mcgAmt = toMcg(amtVal, p);
+    var probe  = Object.assign({}, p, { dailyDose: mcgAmt });
+    var ri = calcReconInfo(probe);
+    if (ri && ri.units) {
+        readout.textContent = ri.units.toFixed(1) + ' units';
+    } else {
+        readout.textContent = '— units';
+    }
+}
+
 function ldPickDefaultPeptide() {
     if (logDoseState.peptideId) {
         var existing = (appData.peptides || []).find(function(x) { return x.id === logDoseState.peptideId; });
@@ -1105,13 +1128,16 @@ function renderLogDosePlate() {
     var pepSelect = document.getElementById('ld-pep-select');
     if (pepSelect) pepSelect.value = p.id;
 
-    // Sync hidden form inputs (these feed the existing submit handler)
+    // Sync form inputs (visible amount/time inputs feed the existing submit handler)
     document.getElementById('dose-peptide').value = p.id;
     document.getElementById('dose-date').value    = localDateStr();
     var now = new Date();
     document.getElementById('dose-time').value =
         String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
     if (p.dailyDose) document.getElementById('dose-amount').value = dispAmt(p.dailyDose, p);
+    // Reflect the peptide's display unit in the inline label
+    var metaUnitEl = document.getElementById('ld-meta-unit');
+    if (metaUnitEl) metaUnitEl.textContent = dispUnit(p);
 
     // Rotation calc
     var lastUsedMap = ldGetPeptideLastUsedMap(p.id);
@@ -1134,6 +1160,8 @@ function renderLogDosePlate() {
         var el = document.getElementById(elId);
         if (el) el.style.display = '';
     });
+    var metaEl = document.querySelector('.ld-pep-meta');
+    if (metaEl) metaEl.style.display = '';
     var primaryWrap  = document.querySelector('.ld-primary-wrap');
     var addNoteWrap  = document.querySelector('.ld-add-note-wrap');
     var chooseSec    = document.querySelector('.ld-choose-section');
@@ -1146,16 +1174,8 @@ function renderLogDosePlate() {
     document.getElementById('ld-color-stripe').style.background = col;
     document.getElementById('ld-pep-name').textContent = p.name;
 
-    var du   = dispUnit(p);
-    var dAmt = dispAmt(p.dailyDose, p);
-    var ri   = calcReconInfo(p);
-    var metaParts = [];
-    if (dAmt) metaParts.push(dAmt + ' ' + du);
-    if (ri && ri.units) metaParts.push(ri.units.toFixed(1) + ' units');
-    var schedTime = (p.schedule && p.schedule.times && p.schedule.times[0]) ||
-                    (p.schedule && p.schedule.time) || null;
-    if (schedTime) metaParts.push(ldFormatTime12(schedTime) || schedTime);
-    document.getElementById('ld-pep-meta').textContent = metaParts.join(' · ') || '—';
+    // Refresh the inline "X units" readout from the current dose-amount value
+    ldRecalcUnits();
 
     // ── Section eyebrow ──
     var isRec = (sel === recommended);
@@ -1241,8 +1261,10 @@ function renderLogDoseEmptyState() {
     if (addNoteWrap) addNoteWrap.style.display = 'none';
     if (chooseSec)   chooseSec.style.display   = 'none';
     document.getElementById('ld-color-stripe').style.background = 'var(--bg-tertiary)';
-    document.getElementById('ld-pep-name').textContent = 'No peptides yet';
-    document.getElementById('ld-pep-meta').textContent = 'Add one in Supply to start logging.';
+    document.getElementById('ld-pep-name').textContent = 'No peptides yet — add one in Supply';
+    // Hide the inline dose/time/units row entirely in empty state (don't clobber the inputs)
+    var metaEl = document.querySelector('.ld-pep-meta');
+    if (metaEl) metaEl.style.display = 'none';
 }
 
 function selectLogDoseSite(site) {

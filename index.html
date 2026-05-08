@@ -158,8 +158,6 @@
             <form id="dose-form">
                 <!-- hidden inputs keep existing JS working unchanged -->
                 <input type="hidden" id="dose-date">
-                <input type="hidden" id="dose-time">
-                <input type="hidden" id="dose-amount">
                 <input type="hidden" id="dose-peptide">
                 <input type="hidden" id="injection-site">
                 <input type="hidden" id="dose-notes">
@@ -170,7 +168,18 @@
                     <div class="ld-color-stripe" id="ld-color-stripe"></div>
                     <div class="ld-pep-info">
                         <div class="ld-pep-name"  id="ld-pep-name">—</div>
-                        <div class="ld-pep-meta"  id="ld-pep-meta">—</div>
+                        <div class="ld-pep-meta">
+                            <input type="number" class="ld-meta-input ld-meta-amount"
+                                   id="dose-amount" step="0.01" min="0"
+                                   inputmode="decimal" placeholder="0"
+                                   oninput="ldRecalcUnits()">
+                            <span class="ld-meta-unit" id="ld-meta-unit">mg</span>
+                            <span class="ld-meta-sep">·</span>
+                            <span class="ld-meta-readout" id="ld-units-readout">— units</span>
+                            <span class="ld-meta-sep">·</span>
+                            <input type="time" class="ld-meta-input ld-meta-time"
+                                   id="dose-time">
+                        </div>
                     </div>
                     <select class="ld-pep-select" id="ld-pep-select">
                         <option value="">Select peptide…</option>

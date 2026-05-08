@@ -52,13 +52,13 @@ body {
 
 /* ── HEADER ──────────────────────────────────────────────── */
 header {
-    background: var(--accent);
+    background: #dc0517;
     /* bleed to page-wrap edges (desktop: 20px padding) */
     margin: 0 -20px 20px;
     padding: 10px 20px 14px;
     border-bottom: none;
     border-radius: 0 0 16px 16px;
-    box-shadow: 0 4px 18px rgba(220,38,38,0.35);
+    box-shadow: 0 4px 18px rgba(220,5,23,0.35);
 }
 .header-row {
     display:flex;
@@ -750,8 +750,56 @@ button {
 .ld-pep-meta {
     font-size: 12px;
     color: var(--text-secondary);
-    margin-top: 1px;
+    margin-top: 2px;
     font-family: ui-monospace, monospace;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+/* Inline editable inputs (dose amount, time) styled to look like text */
+.ld-meta-input {
+    background: rgba(220,5,23,0.08);
+    border: 1px solid rgba(220,5,23,0.22);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 6px;
+    outline: none;
+    /* Float above the invisible peptide-select overlay so taps land here */
+    position: relative;
+    z-index: 3;
+    transition: border-color 0.12s, background 0.12s;
+}
+.ld-meta-input:focus {
+    background: rgba(220,5,23,0.14);
+    border-color: rgba(220,5,23,0.55);
+}
+.ld-meta-amount {
+    width: 56px;
+    text-align: right;
+    /* hide spinners (Chrome/Safari/Firefox) */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.ld-meta-amount::-webkit-outer-spin-button,
+.ld-meta-amount::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.ld-meta-time {
+    min-width: 86px;
+    /* iOS shows time picker — keep base font small but readable */
+}
+.ld-meta-unit,
+.ld-meta-readout {
+    color: var(--text-secondary);
+}
+.ld-meta-sep {
+    color: var(--text-secondary);
+    opacity: 0.5;
 }
 /* Invisible overlay — taps open native <select> picker */
 .ld-pep-select {
