@@ -1156,12 +1156,14 @@ function renderLogDosePlate() {
     logDoseState.showWarning   = showWarn;
 
     // Show all form sections (in case they were hidden by empty state)
-    ['ld-peptide-card','ld-eyebrow','ld-hero-plate'].forEach(function(elId) {
+    ['ld-log-card','ld-eyebrow','ld-hero-plate'].forEach(function(elId) {
         var el = document.getElementById(elId);
         if (el) el.style.display = '';
     });
-    var metaEl = document.querySelector('.ld-pep-meta');
-    if (metaEl) metaEl.style.display = '';
+    var fieldsEl = document.getElementById('ld-log-fields');
+    if (fieldsEl) fieldsEl.style.display = '';
+    var emptyEl  = document.getElementById('ld-empty-msg');
+    if (emptyEl)  emptyEl.style.display  = 'none';
     var primaryWrap  = document.querySelector('.ld-primary-wrap');
     var addNoteWrap  = document.querySelector('.ld-add-note-wrap');
     var chooseSec    = document.querySelector('.ld-choose-section');
@@ -1169,12 +1171,11 @@ function renderLogDosePlate() {
     if (addNoteWrap) addNoteWrap.style.display = '';
     if (chooseSec)   chooseSec.style.display   = '';
 
-    // ── Peptide context card ──
+    // ── Log details card ──
     var col = getPeptideColor(p);
     document.getElementById('ld-color-stripe').style.background = col;
-    document.getElementById('ld-pep-name').textContent = p.name;
 
-    // Refresh the inline "X units" readout from the current dose-amount value
+    // Refresh the "X units" readout from the current dose-amount value
     ldRecalcUnits();
 
     // ── Section eyebrow ──
@@ -1261,10 +1262,11 @@ function renderLogDoseEmptyState() {
     if (addNoteWrap) addNoteWrap.style.display = 'none';
     if (chooseSec)   chooseSec.style.display   = 'none';
     document.getElementById('ld-color-stripe').style.background = 'var(--bg-tertiary)';
-    document.getElementById('ld-pep-name').textContent = 'No peptides yet — add one in Supply';
-    // Hide the inline dose/time/units row entirely in empty state (don't clobber the inputs)
-    var metaEl = document.querySelector('.ld-pep-meta');
-    if (metaEl) metaEl.style.display = 'none';
+    // Swap form fields out for the empty-state message (don't clobber inputs)
+    var fieldsEl = document.getElementById('ld-log-fields');
+    if (fieldsEl) fieldsEl.style.display = 'none';
+    var emptyEl = document.getElementById('ld-empty-msg');
+    if (emptyEl)  emptyEl.style.display  = '';
 }
 
 function selectLogDoseSite(site) {
