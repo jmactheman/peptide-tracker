@@ -748,39 +748,62 @@ button {
     text-overflow: ellipsis;
 }
 .ld-pep-meta {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 2px;
+    margin-top: 6px;
     font-family: ui-monospace, monospace;
     display: flex;
-    align-items: center;
-    gap: 5px;
+    align-items: flex-end;
+    gap: 8px;
     flex-wrap: wrap;
 }
-/* Inline editable inputs (dose amount, time) styled to look like text */
-.ld-meta-input {
-    background: rgba(220,5,23,0.08);
-    border: 1px solid rgba(220,5,23,0.22);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 6px;
-    outline: none;
-    /* Float above the invisible peptide-select overlay so taps land here */
+/* Editable field label + pill wrapper */
+.ld-meta-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    cursor: pointer;
+    /* Float above the invisible peptide-select overlay */
     position: relative;
     z-index: 3;
-    transition: border-color 0.12s, background 0.12s;
 }
-.ld-meta-input:focus {
-    background: rgba(220,5,23,0.14);
-    border-color: rgba(220,5,23,0.55);
+.ld-meta-cap {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    padding-left: 2px;
+}
+/* Pill wrapper — the visible button-like container */
+.ld-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 8px 5px 10px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.ld-meta-field:focus-within .ld-meta-pill {
+    border-color: var(--accent);
+    background: rgba(220,5,23,0.1);
+}
+/* The actual inputs — invisible inside the pill */
+.ld-meta-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0;
+    min-width: 0;
 }
 .ld-meta-amount {
-    width: 56px;
+    width: 44px;
     text-align: right;
-    /* hide spinners (Chrome/Safari/Firefox) */
     -moz-appearance: textfield;
     appearance: textfield;
 }
@@ -790,16 +813,31 @@ button {
     margin: 0;
 }
 .ld-meta-time {
-    min-width: 86px;
-    /* iOS shows time picker — keep base font small but readable */
+    width: 82px;
+    /* prevent iOS zoom — font-size must be ≥16px at the OS level */
+    font-size: 13px;
 }
-.ld-meta-unit,
+/* Unit label inside pill */
+.ld-meta-unit {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+/* Pencil icon */
+.ld-meta-icon {
+    width: 11px;
+    height: 11px;
+    color: var(--text-secondary);
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+/* "X units" static readout — sits beside the pills */
 .ld-meta-readout {
+    font-size: 11px;
     color: var(--text-secondary);
-}
-.ld-meta-sep {
-    color: var(--text-secondary);
-    opacity: 0.5;
+    align-self: flex-end;
+    padding-bottom: 6px;
+    font-family: ui-monospace, monospace;
 }
 /* Invisible overlay — taps open native <select> picker */
 .ld-pep-select {
