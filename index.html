@@ -135,24 +135,6 @@
     <!-- ── LOG DOSE ───────────────────────────────────────── -->
     <div id="tracking" class="tab-content">
 
-        <!-- ── LOGGED CONFIRMATION OVERLAY (hidden until dose saved) ── -->
-        <div id="ld-logged-screen" class="ld-logged-screen" style="display:none;">
-            <div class="ld-logged-body">
-                <div class="ld-check-ring">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M5 12l5 5 9-11"/>
-                    </svg>
-                </div>
-                <div class="ld-logged-eyebrow">Logged</div>
-                <div class="ld-logged-headline" id="ld-logged-headline"></div>
-                <div class="ld-logged-sub"     id="ld-logged-sub"></div>
-                <div class="ld-logged-meta"    id="ld-logged-meta"></div>
-            </div>
-            <div class="ld-undo-wrap">
-                <button class="ld-undo-btn" onclick="undoLastLog()">Undo</button>
-            </div>
-        </div>
-
         <!-- ── LOG DOSE FORM ─────────────────────────────────────── -->
         <div id="ld-form-screen">
             <form id="dose-form">
@@ -574,6 +556,24 @@
                 <button type="submit" class="btn-success">Save Changes</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- ── LOGGED CONFIRMATION OVERLAY (top-level so it can overlay any tab) ── -->
+<div id="ld-logged-screen" class="ld-logged-screen" style="display:none;">
+    <div class="ld-logged-body">
+        <div class="ld-check-ring">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12l5 5 9-11"/>
+            </svg>
+        </div>
+        <div class="ld-logged-eyebrow">Logged</div>
+        <div class="ld-logged-headline" id="ld-logged-headline"></div>
+        <div class="ld-logged-sub"     id="ld-logged-sub"></div>
+        <div class="ld-logged-meta"    id="ld-logged-meta"></div>
+    </div>
+    <div class="ld-undo-wrap">
+        <button class="ld-undo-btn" onclick="undoLastLog()">Undo</button>
     </div>
 </div>
 

@@ -1875,6 +1875,16 @@ async function quickLogDose(peptideId, scheduledTime, site) {
     var du       = dispUnit(p);
     var dAmt     = dispAmt(p.dailyDose, p) || 0;
     if (!dAmt) { alert('Set a dose amount for ' + p.name + ' before quick-logging.'); return; }
+
+    // Snapshot pre-state so the logged-screen Undo can fully reverse this
+    var snapshot = {
+        peptideId: p.id,
+        prevReconstituted: p.reconstituted ? JSON.parse(JSON.stringify(p.reconstituted)) : null,
+        prevVialsOnHand:   p.vialsOnHand,
+        cycleStartedId:    null,
+        prevSelectedSite:  site || null
+    };
+
     if (p.reconstituted) {
         var mcgAmt    = toMcg(dAmt, p);
         var remaining = (p.reconstituted.remainingUnits !== undefined)
@@ -1885,7 +1895,13 @@ async function quickLogDose(peptideId, scheduledTime, site) {
         try { await dbPut('peptides', p); } catch(e) {}
     }
     var hasActive = (appData.cycles || []).some(function(c) { return c.peptideId === p.id && c.status === 'active'; });
-    if (!hasActive && p.cycleDuration) startCycle(p.id, todayStr);
+    if (!hasActive && p.cycleDuration) {
+        var cyclesBefore = (appData.cycles || []).length;
+        startCycle(p.id, todayStr);
+        if ((appData.cycles || []).length > cyclesBefore) {
+            snapshot.cycleStartedId = appData.cycles[appData.cycles.length - 1].id;
+        }
+    }
     var dose = {
         id: genId(), peptideId: p.id, peptideName: p.name,
         date: todayStr, time: timeStr,
@@ -1893,6 +1909,11 @@ async function quickLogDose(peptideId, scheduledTime, site) {
         site: site || null, notes: null, loggedAt: now.toISOString()
     };
     try { await dbPut('doses', dose); appData.doses.push(dose); } catch(e) { alert('Save failed: ' + e.message); return; }
+
+    snapshot.doseId = dose.id;
+    logDoseState.peptideId    = p.id;
+    logDoseState.lastSnapshot = snapshot;
+
     renderTodaySchedule();
     renderDashCalendar();
     renderDashDayDetail(selectedDashDate || todayStr);
@@ -1900,6 +1921,9 @@ async function quickLogDose(peptideId, scheduledTime, site) {
     renderSupply();
     renderLogDosePlate();
     checkLowStockNotification();
+
+    // Same confirmation overlay as the Log Dose tab; auto-dismisses to dashboard
+    showLoggedScreen(dose, p);
 }
 
 async function undoQuickLog(doseId) {
