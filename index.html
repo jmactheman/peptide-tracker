@@ -134,39 +134,120 @@
 
     <!-- ── LOG DOSE ───────────────────────────────────────── -->
     <div id="tracking" class="tab-content">
-        <div class="card">
-            <h2>Log Injection</h2>
+
+        <!-- ── LOGGED CONFIRMATION OVERLAY (hidden until dose saved) ── -->
+        <div id="ld-logged-screen" class="ld-logged-screen" style="display:none;">
+            <div class="ld-logged-body">
+                <div class="ld-check-ring">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12l5 5 9-11"/>
+                    </svg>
+                </div>
+                <div class="ld-logged-eyebrow">Logged</div>
+                <div class="ld-logged-headline" id="ld-logged-headline"></div>
+                <div class="ld-logged-sub"     id="ld-logged-sub"></div>
+                <div class="ld-logged-meta"    id="ld-logged-meta"></div>
+            </div>
+            <div class="ld-undo-wrap">
+                <button class="ld-undo-btn" onclick="undoLastLog()">Undo</button>
+            </div>
+        </div>
+
+        <!-- ── LOG DOSE FORM ─────────────────────────────────────── -->
+        <div id="ld-form-screen">
             <form id="dose-form">
-                <div class="form-grid">
-                    <div class="form-group"><label>Date *</label><input type="date" id="dose-date" required></div>
-                    <div class="form-group"><label>Time</label><input type="time" id="dose-time"></div>
-                    <div class="form-group">
-                        <label>Peptide *</label>
-                        <select id="dose-peptide" required>
-                            <option value="">Select from your supply...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label id="log-dose-label">Dose *</label>
-                        <input type="number" id="dose-amount" required step="0.01" min="0" placeholder="e.g. 250">
-                    </div>
-                    <div class="form-group full-width">
-                        <label>Notes</label>
-                        <textarea id="dose-notes" placeholder="Observations, side effects..."></textarea>
-                    </div>
-                </div>
+                <!-- hidden inputs keep existing JS working unchanged -->
+                <input type="hidden" id="dose-date">
+                <input type="hidden" id="dose-time">
+                <input type="hidden" id="dose-amount">
+                <input type="hidden" id="dose-peptide">
                 <input type="hidden" id="injection-site">
-                <div class="site-inline-section">
-                    <div class="site-inline-label">Injection Site <span class="site-inline-hint">(tap a dot to select)</span></div>
-                    <div class="selected-site-display" id="selected-site-display">No site selected</div>
-                    <div class="rotation-grid" id="rotation-grid"></div>
+                <input type="hidden" id="dose-notes">
+                <input type="hidden" id="log-dose-label">
+
+                <!-- Peptide context card -->
+                <div class="ld-peptide-card" id="ld-peptide-card">
+                    <div class="ld-color-stripe" id="ld-color-stripe"></div>
+                    <div class="ld-pep-info">
+                        <div class="ld-pep-name"  id="ld-pep-name">—</div>
+                        <div class="ld-pep-meta"  id="ld-pep-meta">—</div>
+                    </div>
+                    <select class="ld-pep-select" id="ld-pep-select">
+                        <option value="">Select peptide…</option>
+                    </select>
                 </div>
-                <div id="log-dose-confirm" class="dose-confirm-banner" style="display:none;">✓ Dose logged successfully!</div>
-                <div style="margin-top:32px;display:flex;justify-content:center;">
-                    <button type="submit" class="btn-success">✓ Log Dose</button>
+
+                <!-- Section eyebrow -->
+                <div class="ld-section-eyebrow" id="ld-eyebrow">
+                    <span class="ld-eyebrow-label rec" id="ld-eyebrow-label">Next on rotation</span>
+                    <div class="ld-eyebrow-line"></div>
                 </div>
+
+                <!-- Hero plate -->
+                <div class="ld-hero-plate" id="ld-hero-plate">
+                    <div class="ld-hero-eyebrow">Site</div>
+                    <div class="ld-hero-region" id="ld-hero-region">—</div>
+                    <div class="ld-hero-side"   id="ld-hero-side">—</div>
+                    <div class="ld-hero-stats">
+                        <div class="ld-stat">
+                            <div class="ld-stat-label">Last used</div>
+                            <div class="ld-stat-value" id="ld-stat-last">—</div>
+                        </div>
+                        <div class="ld-stat-divider"></div>
+                        <div class="ld-stat">
+                            <div class="ld-stat-label">Cycle pos</div>
+                            <div class="ld-stat-value" id="ld-stat-cycle">—</div>
+                        </div>
+                        <div class="ld-stat-divider"></div>
+                        <div class="ld-stat">
+                            <div class="ld-stat-label">Streak</div>
+                            <div class="ld-stat-value" id="ld-stat-streak">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Off-rotation warning (hidden by default) -->
+                <div class="ld-warning" id="ld-warning" style="display:none;">
+                    <div class="ld-warning-dot"></div>
+                    <div class="ld-warning-text" id="ld-warning-text"></div>
+                </div>
+
+                <!-- Note card (collapsed by default) -->
+                <div class="ld-note-card" id="ld-note-card" style="display:none;">
+                    <div class="ld-note-header">
+                        <span class="ld-note-title">Note (optional)</span>
+                        <span class="ld-note-counter" id="ld-note-counter">0 / 140</span>
+                    </div>
+                    <textarea class="ld-note-textarea" id="ld-note-textarea" maxlength="140" placeholder="Slight redness, mild fatigue, energy off…" rows="2" oninput="ldNoteInput(this)"></textarea>
+                    <div class="ld-note-chips">
+                        <button type="button" class="ld-note-chip" onclick="ldNoteChip(this,'Redness')">Redness</button>
+                        <button type="button" class="ld-note-chip" onclick="ldNoteChip(this,'Fatigue')">Fatigue</button>
+                        <button type="button" class="ld-note-chip" onclick="ldNoteChip(this,'Hunger ↓')">Hunger ↓</button>
+                        <button type="button" class="ld-note-chip" onclick="ldNoteChip(this,'Energy ↑')">Energy ↑</button>
+                        <button type="button" class="ld-note-chip" onclick="ldNoteChip(this,'Nausea')">Nausea</button>
+                    </div>
+                </div>
+
+                <!-- Primary log button -->
+                <div class="ld-primary-wrap">
+                    <button type="submit" class="ld-primary-btn" id="ld-primary-btn">Log Dose</button>
+                </div>
+
+                <!-- Add note link -->
+                <div class="ld-add-note-wrap">
+                    <button type="button" class="ld-add-note-link" id="ld-add-note-link" onclick="ldToggleNote()">+ Add note</button>
+                </div>
+
+                <!-- Site chip grid -->
+                <div class="ld-choose-section">
+                    <div class="ld-choose-label" id="ld-choose-label">Or choose another</div>
+                    <div class="ld-chip-grid" id="ld-chip-grid"></div>
+                </div>
+
             </form>
         </div>
+
+        <!-- Dosing reference panel (unchanged) -->
         <div class="card" id="quick-reference" style="display:none;">
             <h2>Dosing Reference</h2>
             <div id="quick-reference-content"></div>

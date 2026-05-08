@@ -202,7 +202,7 @@ function switchTab(tabId) {
     // Lazy-render tabs that need fresh data
     if (tabId === 'dashboard') renderDashboard();
     if (tabId === 'cycles')    renderCycles();
-    if (tabId === 'tracking')  renderSiteRotation();
+    if (tabId === 'tracking')  renderLogDosePlate();
     if (tabId === 'settings')  renderProtocolTemplatesList();
 }
 
@@ -825,13 +825,14 @@ document.getElementById('gantt-scroll-right').addEventListener('click', function
 
 // ── DOSE LOG ──────────────────────────────────────────────────
 function updateDoseDropdown() {
-    var sel = document.getElementById('dose-peptide');
+    var sel = document.getElementById('ld-pep-select');
+    if (!sel) return;
     var cur = sel.value;
-    sel.innerHTML = '<option value="">Select from your supply...</option>' +
+    sel.innerHTML = '<option value="">Select peptide…</option>' +
         (appData.peptides || []).map(function(p) {
-            return '<option value="' + p.id + '">' + escapeHtml(p.name) + ' (' + p.mgPerVial + p.unit + ')' + (p.reconstituted ? ' ✓' : '') + '</option>';
+            return '<option value="' + p.id + '">' + escapeHtml(p.name) + (p.reconstituted ? ' ✓' : '') + '</option>';
         }).join('');
-    if ((appData.peptides || []).find(function(x) { return x.id === cur; })) sel.value = cur;
+    if (cur && (appData.peptides || []).find(function(x) { return x.id === cur; })) sel.value = cur;
 }
 
 document.getElementById('dose-peptide').addEventListener('change', function() {
@@ -858,7 +859,7 @@ document.getElementById('dose-peptide').addEventListener('change', function() {
     ref.style.display = 'block';
 });
 
-document.getElementById('dose-date').valueAsDate = new Date();
+document.getElementById('dose-date').value = localDateStr();
 
 document.getElementById('dose-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -866,33 +867,58 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
     var p  = appData.peptides.find(function(x) { return x.id === id; });
     if (!p) { alert('Select a peptide.'); return; }
 
-    var amount    = parseFloat(document.getElementById('dose-amount').value);
-    var doseDate  = document.getElementById('dose-date').value;
+    var site = document.getElementById('injection-site').value || null;
+    if (!site) { alert('Select an injection site.'); return; }
+
+    var amount = parseFloat(document.getElementById('dose-amount').value);
+    if (!amount || amount <= 0) { alert('Set a dose amount for ' + p.name + ' before logging.'); return; }
+
+    var doseDate  = document.getElementById('dose-date').value || localDateStr();
+    var doseTime  = document.getElementById('dose-time').value || (function() {
+        var n = new Date();
+        return String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+    })();
     var du        = dispUnit(p);
-    var mcgAmount = toMcg(amount, p); // convert display unit → mcg for recon calc
+    var mcgAmount = toMcg(amount, p);
+
+    // Snapshot pre-state for transactional Undo
+    var snapshot = {
+        peptideId: p.id,
+        prevReconstituted: p.reconstituted ? JSON.parse(JSON.stringify(p.reconstituted)) : null,
+        prevVialsOnHand: p.vialsOnHand,
+        cycleStartedId: null,
+        prevSelectedSite: site
+    };
 
     if (p.reconstituted) {
         var totalUnits = (p.reconstituted.remainingUnits !== undefined)
             ? p.reconstituted.remainingUnits
             : (isIU(p) ? p.mgPerVial : p.mgPerVial * 1000);
         p.reconstituted.remainingUnits = Math.max(0, totalUnits - mcgAmount);
-        if (totalUnits - mcgAmount <= 0) {
-            alert(p.name + ' vial is now empty.');
+        var vialEmptied = (totalUnits - mcgAmount <= 0);
+        if (vialEmptied) {
             p.reconstituted = null;
             p.vialsOnHand   = Math.max(0, p.vialsOnHand - 1);
         }
         try { await dbPut('peptides', p); } catch(err) { alert('Save failed: ' + err.message); return; }
     }
 
-    var hasActive = (appData.cycles || []).some(function(c) { return c.peptideId === id && c.status === 'active'; });
-    if (!hasActive && p.cycleDuration) startCycle(id, doseDate);
+    var hadActiveCycle = (appData.cycles || []).some(function(c) { return c.peptideId === id && c.status === 'active'; });
+    if (!hadActiveCycle && p.cycleDuration) {
+        var cyclesBefore = (appData.cycles || []).length;
+        startCycle(id, doseDate);
+        // Capture the just-started cycle so Undo can reverse it
+        if ((appData.cycles || []).length > cyclesBefore) {
+            snapshot.cycleStartedId = appData.cycles[appData.cycles.length - 1].id;
+        }
+    }
 
     var dose = {
         id: genId(), peptideId: id, peptideName: p.name,
         date: doseDate,
-        time:  document.getElementById('dose-time').value || null,
-        amount: amount, unit: du, // stored in display unit (mcg or mg)
-        site:  document.getElementById('injection-site').value || null,
+        time: doseTime,
+        amount: amount, unit: du,
+        site: site,
         notes: document.getElementById('dose-notes').value.trim() || null,
         loggedAt: new Date().toISOString()
     };
@@ -902,25 +928,484 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
         appData.doses.push(dose);
     } catch(err) { alert('Save failed: ' + err.message); return; }
 
+    snapshot.doseId = dose.id;
+    logDoseState.lastSnapshot = snapshot;
+
     renderSupply();
     renderHistory();
-    renderSiteRotation();
-
-    document.getElementById('dose-peptide').value     = '';
-    document.getElementById('dose-amount').value      = '';
-    document.getElementById('injection-site').value   = '';
-    document.getElementById('dose-notes').value       = '';
-    document.getElementById('log-dose-label').textContent = 'Dose *';
-    document.getElementById('quick-reference').style.display = 'none';
-    var siteDisp = document.getElementById('selected-site-display');
-    if (siteDisp) siteDisp.textContent = 'No site selected';
-    var confirmBanner = document.getElementById('log-dose-confirm');
-    if (confirmBanner) {
-        confirmBanner.style.display = 'block';
-        setTimeout(function() { confirmBanner.style.display = 'none'; }, 2500);
-    }
+    renderTodaySchedule();
+    renderDashCalendar();
+    renderDashDayDetail(selectedDashDate || localDateStr());
     checkLowStockNotification();
+
+    // Reset note field for next time
+    var nta = document.getElementById('ld-note-textarea');
+    if (nta) { nta.value = ''; document.getElementById('dose-notes').value = ''; }
+    var nc = document.getElementById('ld-note-counter');
+    if (nc) nc.textContent = '0 / 140';
+    document.querySelectorAll('.ld-note-chip.active').forEach(function(c) { c.classList.remove('active'); });
+    var noteCard = document.getElementById('ld-note-card');
+    if (noteCard) noteCard.style.display = 'none';
+    logDoseState.noteOpen = false;
+
+    showLoggedScreen(dose, p);
 });
+
+// ── LOG DOSE V2 (hero plate + chip grid) ──────────────────────
+var logDoseState = {
+    peptideId:        null,
+    selectedSite:     null,
+    recommendedSite:  null,
+    isOffRotation:    false,
+    showWarning:      false,
+    noteOpen:         false,
+    autoDismissTimer: null,
+    lastSnapshot:     null
+};
+
+var LD_CANONICAL_SITES = [
+    'Abdomen - Left',  'Abdomen - Right',
+    'Thigh - Left',    'Thigh - Right',
+    'Glute - Left',    'Glute - Right',
+    'Deltoid - Left',  'Deltoid - Right'
+];
+
+function ldDaysSinceDate(dateStr) {
+    if (!dateStr) return Infinity;
+    var d = new Date(dateStr + 'T00:00:00');
+    var t = new Date(); t.setHours(0,0,0,0);
+    return Math.max(0, Math.floor((t - d) / 86400000));
+}
+
+function ldGetPeptideLastUsedMap(peptideId) {
+    var doses = (appData.doses || [])
+        .filter(function(d) { return d.peptideId === peptideId && d.site; })
+        .sort(function(a,b) {
+            return b.date.localeCompare(a.date) || ((b.time || '').localeCompare(a.time || ''));
+        });
+    var map = {};
+    doses.forEach(function(d) {
+        if (map[d.site] === undefined) map[d.site] = ldDaysSinceDate(d.date);
+    });
+    return map;
+}
+
+function ldGetRecommended(peptideId) {
+    var map = ldGetPeptideLastUsedMap(peptideId);
+    var best = null, bestDays = -1;
+    LD_CANONICAL_SITES.forEach(function(s) {
+        var days = (map[s] === undefined) ? Infinity : map[s];
+        if (days > bestDays) { bestDays = days; best = s; }
+    });
+    return best;
+}
+
+function ldGetCyclePos(peptideId) {
+    var c = (appData.cycles || []).find(function(x) {
+        return x.peptideId === peptideId && x.status === 'active';
+    });
+    if (!c || !c.plannedDuration) return null;
+    var start = new Date(c.startDate + 'T00:00:00');
+    var t = new Date(); t.setHours(0,0,0,0);
+    var diffDays = Math.max(0, Math.floor((t - start) / 86400000));
+    var week = Math.min(c.plannedDuration, Math.floor(diffDays / 7) + 1);
+    return week + ' / ' + c.plannedDuration;
+}
+
+function ldGetStreak() {
+    var doses = appData.doses || [];
+    if (!doses.length) return 0;
+    var dateSet = {};
+    doses.forEach(function(d) { if (d.date) dateSet[d.date] = true; });
+    var cursor = new Date(); cursor.setHours(0,0,0,0);
+    // If today has no dose yet, start counting from yesterday
+    if (!dateSet[localDateStr(cursor)]) cursor.setDate(cursor.getDate() - 1);
+    var streak = 0;
+    while (dateSet[localDateStr(cursor)] && streak < 999) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+}
+
+function ldStatusOf(daysSince, isRecommended) {
+    if (isRecommended)          return 'rec';
+    if (daysSince === Infinity) return 'new';
+    if (daysSince <= 1)         return 'hot';
+    if (daysSince <= 4)         return 'warn';
+    return 'ok';
+}
+
+function ldFormatDays(daysSince) {
+    if (daysSince === Infinity) return '—';
+    if (daysSince === 0)        return 'today';
+    return daysSince + 'd';
+}
+
+function ldFormatTime12(t) {
+    if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return '';
+    var parts = t.split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parts[1];
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    var hh = h % 12 || 12;
+    return hh + ':' + m + ' ' + ampm;
+}
+
+function ldFormatRegionSide(site) {
+    if (!site) return { region: '—', side: '—', abbrev: '' };
+    var parts = site.split(' - ');
+    var region = parts[0] || '—';
+    var side   = parts[1] === 'Left' ? 'Left side' : (parts[1] === 'Right' ? 'Right side' : '—');
+    var abbrev = parts[1] === 'Left' ? 'L' : (parts[1] === 'Right' ? 'R' : '');
+    return { region: region, side: side, abbrev: abbrev };
+}
+
+function ldPickDefaultPeptide() {
+    if (logDoseState.peptideId) {
+        var existing = (appData.peptides || []).find(function(x) { return x.id === logDoseState.peptideId; });
+        if (existing) return existing.id;
+    }
+    // First peptide with a scheduled dose today, prefer untaken
+    if (typeof getTodaysSchedule === 'function') {
+        var todays = getTodaysSchedule();
+        var untaken = todays.find(function(item) { return !item.taken; });
+        if (untaken) return untaken.peptide.id;
+        if (todays.length) return todays[0].peptide.id;
+    }
+    return (appData.peptides && appData.peptides[0]) ? appData.peptides[0].id : null;
+}
+
+function renderLogDosePlate() {
+    var formScreen = document.getElementById('ld-form-screen');
+    if (!formScreen) return;
+
+    // Make sure we're showing the form (not the logged overlay)
+    var loggedScreen = document.getElementById('ld-logged-screen');
+    if (loggedScreen) loggedScreen.style.display = 'none';
+    formScreen.style.display = 'block';
+
+    // Populate peptide select
+    updateDoseDropdown();
+
+    // No peptides at all → empty state
+    if (!appData.peptides || !appData.peptides.length) {
+        renderLogDoseEmptyState();
+        return;
+    }
+
+    // Decide active peptide
+    var pid = logDoseState.peptideId || ldPickDefaultPeptide();
+    var p   = (appData.peptides || []).find(function(x) { return x.id === pid; });
+    if (!p) {
+        renderLogDoseEmptyState();
+        return;
+    }
+    logDoseState.peptideId = p.id;
+    var pepSelect = document.getElementById('ld-pep-select');
+    if (pepSelect) pepSelect.value = p.id;
+
+    // Sync hidden form inputs (these feed the existing submit handler)
+    document.getElementById('dose-peptide').value = p.id;
+    document.getElementById('dose-date').value    = localDateStr();
+    var now = new Date();
+    document.getElementById('dose-time').value =
+        String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    if (p.dailyDose) document.getElementById('dose-amount').value = dispAmt(p.dailyDose, p);
+
+    // Rotation calc
+    var lastUsedMap = ldGetPeptideLastUsedMap(p.id);
+    var recommended = ldGetRecommended(p.id);
+    logDoseState.recommendedSite = recommended;
+
+    // Default to recommended on first render or after a fresh log
+    if (!logDoseState.selectedSite) logDoseState.selectedSite = recommended;
+    var sel = logDoseState.selectedSite;
+
+    // Off-rotation flags
+    var isOffRot   = (sel !== recommended);
+    var selDays    = (sel && lastUsedMap[sel] !== undefined) ? lastUsedMap[sel] : Infinity;
+    var showWarn   = isOffRot && selDays !== Infinity && selDays < 5;
+    logDoseState.isOffRotation = isOffRot;
+    logDoseState.showWarning   = showWarn;
+
+    // Show all form sections (in case they were hidden by empty state)
+    ['ld-peptide-card','ld-eyebrow','ld-hero-plate'].forEach(function(elId) {
+        var el = document.getElementById(elId);
+        if (el) el.style.display = '';
+    });
+    var primaryWrap  = document.querySelector('.ld-primary-wrap');
+    var addNoteWrap  = document.querySelector('.ld-add-note-wrap');
+    var chooseSec    = document.querySelector('.ld-choose-section');
+    if (primaryWrap) primaryWrap.style.display = '';
+    if (addNoteWrap) addNoteWrap.style.display = '';
+    if (chooseSec)   chooseSec.style.display   = '';
+
+    // ── Peptide context card ──
+    var col = getPeptideColor(p);
+    document.getElementById('ld-color-stripe').style.background = col;
+    document.getElementById('ld-pep-name').textContent = p.name;
+
+    var du   = dispUnit(p);
+    var dAmt = dispAmt(p.dailyDose, p);
+    var ri   = calcReconInfo(p);
+    var metaParts = [];
+    if (dAmt) metaParts.push(dAmt + ' ' + du);
+    if (ri && ri.units) metaParts.push(ri.units.toFixed(1) + ' units');
+    var schedTime = (p.schedule && p.schedule.times && p.schedule.times[0]) ||
+                    (p.schedule && p.schedule.time) || null;
+    if (schedTime) metaParts.push(ldFormatTime12(schedTime) || schedTime);
+    document.getElementById('ld-pep-meta').textContent = metaParts.join(' · ') || '—';
+
+    // ── Section eyebrow ──
+    var isRec = (sel === recommended);
+    var eyebrowLbl = document.getElementById('ld-eyebrow-label');
+    eyebrowLbl.textContent = isRec ? 'Next on rotation' : 'Selected site';
+    eyebrowLbl.classList.toggle('rec', isRec);
+
+    // ── Hero plate ──
+    var rs = ldFormatRegionSide(sel);
+    document.getElementById('ld-hero-region').textContent = rs.region;
+    document.getElementById('ld-hero-side').textContent   = rs.side;
+    document.getElementById('ld-stat-last').textContent =
+        selDays === Infinity ? 'never' : (selDays === 0 ? 'today' : selDays + 'd ago');
+    document.getElementById('ld-stat-cycle').textContent =
+        isOffRot ? 'off-rot' : (ldGetCyclePos(p.id) || '—');
+    var streak = ldGetStreak();
+    document.getElementById('ld-stat-streak').textContent = streak ? (streak + 'd') : '—';
+
+    // ── Off-rotation warning ──
+    var warning = document.getElementById('ld-warning');
+    if (showWarn) {
+        document.getElementById('ld-warning-text').textContent =
+            'Off rotation. Used ' + selDays + ' day' + (selDays === 1 ? '' : 's') +
+            ' ago — consider a different side.';
+        warning.style.display = 'flex';
+    } else {
+        warning.style.display = 'none';
+    }
+
+    // ── Primary button ──
+    var btn = document.getElementById('ld-primary-btn');
+    btn.textContent = sel ? ('Log to ' + rs.region + ' ' + rs.abbrev) : 'Select a site';
+    btn.disabled    = !sel;
+    btn.style.background = sel ? '' : 'var(--bg-tertiary)';
+
+    // Hidden site input feeds the submit handler
+    document.getElementById('injection-site').value = sel || '';
+
+    // ── Chip grid ──
+    renderLdChipGrid(lastUsedMap, recommended);
+
+    // ── "Or choose another" / "All sites" label ──
+    document.getElementById('ld-choose-label').textContent =
+        isOffRot ? 'All sites' : 'Or choose another';
+}
+
+function renderLdChipGrid(lastUsedMap, recommended) {
+    var grid = document.getElementById('ld-chip-grid');
+    if (!grid) return;
+
+    var sites = LD_CANONICAL_SITES.slice();
+    var chips = logDoseState.isOffRotation
+        ? sites
+        : sites.filter(function(s) { return s !== recommended; }).slice(0, 6);
+
+    grid.innerHTML = chips.map(function(site) {
+        var days     = (lastUsedMap[site] === undefined) ? Infinity : lastUsedMap[site];
+        var isRec    = (site === recommended);
+        var isSelChp = (site === logDoseState.selectedSite);
+        var status   = ldStatusOf(days, isRec);
+        var label    = site.replace(' - Left', ' L').replace(' - Right', ' R');
+        var lastTxt  = ldFormatDays(days);
+        var cls      = 'ld-chip ld-status-' + status + (isSelChp ? ' selected' : '');
+        var safeSite = site.replace(/'/g, "\\'");
+        return '<button type="button" class="' + cls + '" onclick="selectLogDoseSite(\'' + safeSite + '\')">' +
+               '<span class="ld-chip-status"></span>' +
+               '<span class="ld-chip-label">' + escapeHtml(label) + '</span>' +
+               '<span class="ld-chip-last">' + escapeHtml(lastTxt) + '</span>' +
+               '</button>';
+    }).join('');
+}
+
+function renderLogDoseEmptyState() {
+    // Hide active form sections, show simple empty message inside the peptide card area
+    document.getElementById('ld-eyebrow').style.display    = 'none';
+    document.getElementById('ld-hero-plate').style.display = 'none';
+    document.getElementById('ld-warning').style.display    = 'none';
+    document.getElementById('ld-note-card').style.display  = 'none';
+    var primaryWrap = document.querySelector('.ld-primary-wrap');
+    var addNoteWrap = document.querySelector('.ld-add-note-wrap');
+    var chooseSec   = document.querySelector('.ld-choose-section');
+    if (primaryWrap) primaryWrap.style.display = 'none';
+    if (addNoteWrap) addNoteWrap.style.display = 'none';
+    if (chooseSec)   chooseSec.style.display   = 'none';
+    document.getElementById('ld-color-stripe').style.background = 'var(--bg-tertiary)';
+    document.getElementById('ld-pep-name').textContent = 'No peptides yet';
+    document.getElementById('ld-pep-meta').textContent = 'Add one in Supply to start logging.';
+}
+
+function selectLogDoseSite(site) {
+    logDoseState.selectedSite = site;
+    renderLogDosePlate();
+}
+
+// Wire peptide select change
+(function() {
+    var sel = document.getElementById('ld-pep-select');
+    if (sel) {
+        sel.addEventListener('change', function() {
+            logDoseState.peptideId    = this.value || null;
+            logDoseState.selectedSite = null;     // re-pick recommended for new peptide
+            renderLogDosePlate();
+        });
+    }
+})();
+
+// ── Note card handlers ──
+function ldToggleNote() {
+    var card = document.getElementById('ld-note-card');
+    var link = document.getElementById('ld-add-note-link');
+    if (!card || !link) return;
+    logDoseState.noteOpen = !logDoseState.noteOpen;
+    if (logDoseState.noteOpen) {
+        card.style.display = 'block';
+        link.textContent   = '− Hide note';
+        var ta = document.getElementById('ld-note-textarea');
+        if (ta) ta.focus();
+    } else {
+        card.style.display = 'none';
+        link.textContent   = '+ Add note';
+    }
+}
+
+function ldNoteInput(el) {
+    var hidden = document.getElementById('dose-notes');
+    if (hidden) hidden.value = el.value;
+    var counter = document.getElementById('ld-note-counter');
+    if (counter) counter.textContent = el.value.length + ' / 140';
+    // Reflect chip "active" state if their text appears
+    document.querySelectorAll('.ld-note-chip').forEach(function(c) {
+        var t = c.dataset.text || c.textContent;
+        c.classList.toggle('active', el.value.indexOf(t) > -1);
+    });
+}
+
+function ldNoteChip(btn, text) {
+    var ta = document.getElementById('ld-note-textarea');
+    if (!ta) return;
+    var hidden = document.getElementById('dose-notes');
+    var idx = ta.value.indexOf(text);
+    if (idx > -1) {
+        // Remove this chip's text, plus a leading separator if present
+        var before = ta.value.substring(0, idx).replace(/[,\s]+$/, '');
+        var after  = ta.value.substring(idx + text.length).replace(/^[,\s]+/, '');
+        var joined = (before && after) ? (before + ', ' + after) : (before + after);
+        ta.value = joined;
+        btn.classList.remove('active');
+    } else {
+        ta.value = ta.value ? (ta.value.replace(/\s+$/, '') + ', ' + text) : text;
+        btn.classList.add('active');
+    }
+    if (hidden) hidden.value = ta.value;
+    var counter = document.getElementById('ld-note-counter');
+    if (counter) counter.textContent = ta.value.length + ' / 140';
+}
+
+// ── Logged confirmation screen + Undo ──
+function showLoggedScreen(dose, p) {
+    var formScreen   = document.getElementById('ld-form-screen');
+    var loggedScreen = document.getElementById('ld-logged-screen');
+    if (!loggedScreen) return;
+    formScreen.style.display   = 'none';
+    loggedScreen.style.display = 'flex';
+
+    var du   = dose.unit;
+    var rs   = ldFormatRegionSide(dose.site);
+    var pos  = ldGetCyclePos(p.id);
+    var when = (function() {
+        var d  = new Date(dose.date + 'T00:00:00');
+        var dt = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        var tm = ldFormatTime12(dose.time);
+        return dt + (tm ? (' · ' + tm) : '');
+    })();
+
+    document.getElementById('ld-logged-headline').textContent = p.name + ' · ' + dose.amount + ' ' + du;
+    document.getElementById('ld-logged-sub').textContent      = rs.region + (rs.abbrev ? ' ' + rs.abbrev : '');
+    document.getElementById('ld-logged-meta').textContent     = when + (pos ? ' · cycle ' + pos : '');
+
+    // Trigger check-ring animation
+    var ring = document.querySelector('#ld-logged-screen .ld-check-ring');
+    if (ring) {
+        ring.classList.remove('animate');
+        // force reflow
+        void ring.offsetWidth;
+        ring.classList.add('animate');
+    }
+
+    // Reset for next use
+    logDoseState.selectedSite = null;
+
+    // Clear any prior timer, then auto-dismiss to dashboard
+    if (logDoseState.autoDismissTimer) clearTimeout(logDoseState.autoDismissTimer);
+    logDoseState.autoDismissTimer = setTimeout(function() {
+        logDoseState.autoDismissTimer = null;
+        logDoseState.lastSnapshot = null;
+        // Re-render plate so next time tracking opens it's fresh
+        renderLogDosePlate();
+        switchTab('dashboard');
+    }, 1500);
+}
+
+async function undoLastLog() {
+    var snap = logDoseState.lastSnapshot;
+    if (!snap) {
+        // Nothing to undo — just go back to form
+        var loggedScreen = document.getElementById('ld-logged-screen');
+        var formScreen   = document.getElementById('ld-form-screen');
+        if (loggedScreen) loggedScreen.style.display = 'none';
+        if (formScreen)   formScreen.style.display   = 'block';
+        return;
+    }
+
+    if (logDoseState.autoDismissTimer) {
+        clearTimeout(logDoseState.autoDismissTimer);
+        logDoseState.autoDismissTimer = null;
+    }
+
+    // 1. Delete dose row
+    appData.doses = (appData.doses || []).filter(function(d) { return d.id !== snap.doseId; });
+    try { await dbDelete('doses', snap.doseId); } catch(e) { /* swallow */ }
+
+    // 2. Restore peptide pre-state (recon + vials)
+    var p = (appData.peptides || []).find(function(x) { return x.id === snap.peptideId; });
+    if (p) {
+        p.reconstituted = snap.prevReconstituted
+            ? JSON.parse(JSON.stringify(snap.prevReconstituted))
+            : null;
+        p.vialsOnHand = snap.prevVialsOnHand;
+        try { await dbPut('peptides', p); } catch(e) { /* swallow */ }
+    }
+
+    // 3. If a cycle was newly auto-started, remove it
+    if (snap.cycleStartedId) {
+        appData.cycles = (appData.cycles || []).filter(function(c) { return c.id !== snap.cycleStartedId; });
+        try { await dbDelete('cycles', snap.cycleStartedId); } catch(e) { /* swallow */ }
+    }
+
+    // 4. Restore selection so the user can re-tap or pick a different site
+    logDoseState.selectedSite = snap.prevSelectedSite || null;
+    logDoseState.lastSnapshot = null;
+
+    // 5. Refresh everything
+    renderSupply();
+    renderHistory();
+    renderTodaySchedule();
+    renderDashCalendar();
+    renderDashDayDetail(selectedDashDate || localDateStr());
+    checkLowStockNotification();
+    renderLogDosePlate();
+}
 
 // ── INJECTION SITE ROTATION ───────────────────────────────────
 // Site coordinates on the body SVG (200×400 viewBox) — split by view
@@ -1389,7 +1874,7 @@ async function quickLogDose(peptideId, scheduledTime, site) {
     renderDashDayDetail(selectedDashDate || todayStr);
     renderHistory();
     renderSupply();
-    renderSiteRotation();
+    renderLogDosePlate();
     checkLowStockNotification();
 }
 
@@ -1673,7 +2158,7 @@ document.getElementById('edit-dose-form').addEventListener('submit', async funct
     renderDashDayDetail(selectedDashDate || localDateStr());
     renderTodaySchedule();
     renderSupply();
-    renderSiteRotation();
+    renderLogDosePlate();
 });
 
 // ── MODALS ────────────────────────────────────────────────────
@@ -1747,7 +2232,7 @@ function renderAll() {
     updateDoseDropdown();
     renderHistory();
     renderDashboard();
-    renderSiteRotation();
+    renderLogDosePlate();
     renderProtocolTemplatesList();
 }
 

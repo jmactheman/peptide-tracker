@@ -634,49 +634,408 @@ button {
 .sched-timescount-row { display:flex; align-items:center; gap:8px; margin-top:10px; }
 .sched-times-inputs { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
 
-/* ── INLINE SITE SELECTOR (Log page) ────────────────────── */
-.site-inline-section {
-    margin-top:20px;
-    padding-top:16px;
-    border-top:1px solid var(--border);
+/* ── LOG DOSE V2 ─────────────────────────────────────────── */
+
+/* Logged overlay (fixed so it covers tab + bottom nav) */
+.ld-logged-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
 }
-.site-inline-label {
-    font-size:0.82rem;
-    font-weight:600;
-    color:var(--text-secondary);
-    text-transform:uppercase;
-    letter-spacing:0.05em;
-    margin-bottom:8px;
+.ld-logged-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
 }
-.site-inline-hint {
-    font-weight:400;
-    text-transform:none;
-    letter-spacing:0;
-    font-size:0.78rem;
+@keyframes ld-check-in {
+    from { opacity: 0; transform: scale(0.7); }
+    to   { opacity: 1; transform: scale(1); }
 }
-.selected-site-display {
-    font-size:0.9rem;
-    font-weight:600;
-    color:var(--accent);
-    padding:8px 12px;
-    background:rgba(220,38,38,0.07);
-    border:1px solid rgba(220,38,38,0.18);
-    border-radius:8px;
-    margin-bottom:10px;
-    min-height:36px;
-    display:flex;
-    align-items:center;
+.ld-check-ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1.5px solid var(--success);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    animation: ld-check-in 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.ld-logged-eyebrow {
+    font-size: 11px;
+    color: var(--success);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+.ld-logged-headline {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    text-align: center;
+    line-height: 1.1;
+}
+.ld-logged-sub {
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: -0.025em;
+    text-align: center;
+    line-height: 1.1;
+}
+.ld-logged-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, monospace;
+    margin-top: 14px;
+    letter-spacing: 0.04em;
+}
+.ld-undo-wrap { padding: 0 18px 34px; }
+.ld-undo-btn {
+    width: 100%;
+    padding: 13px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+.ld-undo-btn:hover { background: var(--bg-secondary); }
+
+/* Form screen */
+#ld-form-screen { padding-bottom: 24px; }
+
+/* Peptide context card */
+.ld-peptide-card {
+    position: relative;
+    margin: 10px 18px 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    overflow: hidden;
+}
+.ld-color-stripe {
+    width: 8px;
+    height: 38px;
+    border-radius: 4px;
+    background: var(--accent);
+    flex-shrink: 0;
+}
+.ld-pep-info { flex: 1; min-width: 0; }
+.ld-pep-name {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ld-pep-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+    font-family: ui-monospace, monospace;
+}
+/* Invisible overlay — taps open native <select> picker */
+.ld-pep-select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 2;
+    font-size: 16px; /* prevents iOS auto-zoom */
+    -webkit-appearance: none;
 }
 
-/* ── DOSE CONFIRM BANNER ─────────────────────────────────── */
-.dose-confirm-banner {
-    margin-top:12px;
-    padding:10px 14px;
-    background:rgba(34,197,94,0.12);
-    border:1px solid rgba(34,197,94,0.3);
-    border-radius:8px;
-    color:var(--success);
-    font-weight:600;
-    font-size:0.9rem;
-    text-align:center;
+/* Section eyebrow (label + horizontal rule) */
+.ld-section-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 22px 10px;
+}
+.ld-eyebrow-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+.ld-eyebrow-label.rec { color: var(--success); }
+.ld-eyebrow-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+/* Hero plate */
+.ld-hero-plate {
+    margin: 0 18px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 24px 22px;
+}
+.ld-hero-eyebrow {
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.ld-hero-region {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.0;
+}
+.ld-hero-side {
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: -0.03em;
+    line-height: 1.0;
+}
+.ld-hero-stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 18px;
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    align-items: flex-start;
+}
+.ld-stat { display: flex; flex-direction: column; }
+.ld-stat-label {
+    font-size: 9.5px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-bottom: 3px;
+}
+.ld-stat-value {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ld-stat-divider {
+    width: 1px;
+    background: var(--border);
+    align-self: stretch;
+    flex-shrink: 0;
+}
+
+/* Off-rotation warning */
+@keyframes ld-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.ld-warning {
+    margin: 10px 18px 0;
+    background: rgba(249,115,22,0.08);
+    border: 1px solid rgba(249,115,22,0.35);
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: ld-fade-in 0.2s ease both;
+}
+.ld-warning-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #f97316;
+    flex-shrink: 0;
+}
+.ld-warning-text {
+    font-size: 12px;
+    color: #e8c8a4;
+    flex: 1;
+    line-height: 1.3;
+}
+
+/* Note card (collapsed/expanded via JS) */
+.ld-note-card {
+    margin: 12px 18px 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+}
+.ld-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.ld-note-title {
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.ld-note-counter {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, monospace;
+    opacity: 0.6;
+}
+.ld-note-textarea {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    min-height: 38px;
+    padding: 0;
+}
+.ld-note-textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.55;
+    font-style: italic;
+}
+.ld-note-chips {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+.ld-note-chip {
+    font-size: 11px;
+    padding: 5px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, monospace;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ld-note-chip.active {
+    background: rgba(220,38,38,0.12);
+    border-color: rgba(220,38,38,0.4);
+    color: var(--accent);
+}
+
+/* Primary CTA */
+.ld-primary-wrap { padding: 14px 18px 0; }
+.ld-primary-btn {
+    width: 100%;
+    padding: 17px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+.ld-primary-btn:hover { background: var(--accent-hover); }
+.ld-primary-btn:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: default;
+}
+
+/* Add note link */
+.ld-add-note-wrap {
+    padding: 10px 18px 0;
+    text-align: center;
+}
+.ld-add-note-link {
+    background: none;
+    border: none;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+}
+.ld-add-note-link:hover { color: var(--text-primary); }
+
+/* Site chip grid */
+.ld-choose-section { padding: 20px 18px 0; }
+.ld-choose-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 0 4px 10px;
+}
+.ld-chip-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.ld-chip {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 11px 12px;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.ld-chip:hover { background: var(--bg-tertiary); }
+.ld-chip.selected {
+    background: var(--bg-primary);
+    border-color: rgba(249,115,22,0.6);
+    box-shadow: 0 0 0 3px rgba(249,115,22,0.14);
+}
+/* Status dot */
+.ld-chip-status {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.ld-status-hot  .ld-chip-status { background: #dc2626; }
+.ld-status-warn .ld-chip-status { background: #f97316; }
+.ld-status-ok   .ld-chip-status { background: #71717a; }
+.ld-status-rec  .ld-chip-status { background: #22c55e; }
+.ld-status-new  .ld-chip-status { background: #3f3f46; }
+.ld-chip-label {
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
+    color: var(--text-primary);
+}
+.ld-chip-last {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, monospace;
 }
