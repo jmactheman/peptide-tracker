@@ -1938,8 +1938,10 @@ async function undoQuickLog(doseId) {
 
 function logAdhocDose(dateStr) {
     var d = dateStr || localDateStr();
-    document.getElementById('dose-date').value = d;
+    // switchTab → renderLogDosePlate sets dose-date to today; override AFTER so the
+    // calendar's chosen day wins.
     switchTab('tracking');
+    document.getElementById('dose-date').value = d;
 }
 
 function renderDashCalendar() {
