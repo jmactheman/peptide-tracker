@@ -1126,3 +1126,47 @@ button {
     color: var(--text-secondary);
     font-family: ui-monospace, monospace;
 }
+
+/* ── Form hints ───────────────────────────────────────────── */
+.form-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 2px 0 6px;
+    line-height: 1.4;
+}
+
+/* ── Advanced disclosure (Supply add/edit forms) ──────────── */
+.adv-disclosure {
+    border: none;
+    background: none;
+    margin: 0;
+    padding: 0;
+}
+.adv-summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    list-style: none;
+    padding: 2px 0 4px;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.adv-summary::-webkit-details-marker { display: none; }
+.adv-summary::after {
+    content: '▸';
+    font-size: 9px;
+    display: inline-block;
+    transition: transform 0.15s;
+}
+details[open] > .adv-summary::after { transform: rotate(90deg); }
+.adv-field { margin-top: 8px; }
+.adv-field label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 2px;
+}
+.adv-field select { width: 100%; }

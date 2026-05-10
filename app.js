@@ -585,6 +585,8 @@ function openEdit(id) {
     document.querySelectorAll('#edit-form .edit-full-only').forEach(function(el) {
         el.style.display = editIsSimple ? 'none' : '';
     });
+    var editDispG = document.getElementById('edit-display-unit-group');
+    if (editDispG) editDispG.style.display = (p.unit === 'mg') ? '' : 'none';
     document.getElementById('edit-modal').classList.add('active');
 }
 

@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 
@@ -55,7 +55,8 @@
                         <input type="text" id="peptide-custom-name" placeholder="e.g. My Peptide">
                     </div>
                     <div class="form-group">
-                        <label>Unit</label>
+                        <label>Vial Unit</label>
+                        <p class="form-hint">Unit printed on your vial label (mg, IU, or mL)</p>
                         <select id="peptide-unit">
                             <option value="mg">mg</option>
                             <option value="IU">IU</option>
@@ -63,17 +64,23 @@
                         </select>
                     </div>
                     <div class="form-group" id="display-unit-group">
-                        <label>Dose Display</label>
-                        <select id="peptide-display-unit">
-                            <option value="mcg">mcg</option>
-                            <option value="mg">mg</option>
-                        </select>
+                        <details class="adv-disclosure">
+                            <summary class="adv-summary">Advanced</summary>
+                            <div class="adv-field">
+                                <label>Show Doses As</label>
+                                <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
+                                <select id="peptide-display-unit">
+                                    <option value="mcg">mcg</option>
+                                    <option value="mg">mg</option>
+                                </select>
+                            </div>
+                        </details>
                     </div>
                     <div class="form-group">
                         <label>Tracking Mode</label>
                         <select id="peptide-tracking-mode">
                             <option value="simple">Simple</option>
-                            <option value="full">Full</option>
+                            <option value="full">Track Vial</option>
                         </select>
                     </div>
                     <div class="form-group full-mode-only">
@@ -455,7 +462,7 @@
                     <label>Tracking Mode</label>
                     <select id="edit-tracking-mode">
                         <option value="simple">Simple</option>
-                        <option value="full">Full</option>
+                        <option value="full">Track Vial</option>
                     </select>
                 </div>
                 <div class="form-group edit-full-only"><label>Vials on Hand</label><input type="number" id="edit-vials" min="0" value="0"></div>
@@ -463,12 +470,18 @@
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
                 <div class="form-group edit-full-only"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
                 <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
-                <div class="form-group">
-                    <label>Dose Display</label>
-                    <select id="edit-display-unit">
-                        <option value="mcg">mcg</option>
-                        <option value="mg">mg</option>
-                    </select>
+                <div class="form-group" id="edit-display-unit-group">
+                    <details class="adv-disclosure">
+                        <summary class="adv-summary">Advanced</summary>
+                        <div class="adv-field">
+                            <label>Show Doses As</label>
+                            <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
+                            <select id="edit-display-unit">
+                                <option value="mcg">mcg</option>
+                                <option value="mg">mg</option>
+                            </select>
+                        </div>
+                    </details>
                 </div>
             </div>
             <div class="form-group" style="margin-top:14px;">
@@ -580,9 +593,9 @@
     </div>
 </div>
 
-<script src="data.js?v=8"></script>
-<script src="db.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="data.js?v=9"></script>
+<script src="db.js?v=9"></script>
+<script src="app.js?v=9"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
