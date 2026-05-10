@@ -16,6 +16,7 @@ var bodyView          = 'front';
 var sitePickerPeptideId    = null;
 var sitePickerTime         = null;
 var sitePickerSelectedSite = null;
+var sitePickerDate         = null;  // dose date (null = today; set when logging a missed past dose)
 
 async function loadAllData() {
     appData.peptides  = await dbGetAll('peptides');
@@ -1855,14 +1856,23 @@ function renderTodaySchedule() {
     }).join('');
 }
 
-function showSitePickerModal(peptideId, scheduledTime) {
+function showSitePickerModal(peptideId, scheduledTime, dateStr) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     sitePickerPeptideId    = peptideId;
     sitePickerTime         = scheduledTime;
+    sitePickerDate         = dateStr || null;  // null = today; non-null = backdated
     sitePickerSelectedSite = null;
     var title = document.getElementById('site-picker-title');
-    if (title) title.textContent = '💉 ' + p.name + ' — Choose Site';
+    if (title) {
+        // For backdated logs, surface the date in the modal title so the user
+        // knows they're logging a missed dose, not today's.
+        var todayStr = localDateStr();
+        var suffix = (dateStr && dateStr !== todayStr)
+            ? ' (' + new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ')'
+            : '';
+        title.textContent = '💉 ' + p.name + suffix + ' — Choose Site';
+    }
     var lbl = document.getElementById('site-picker-selected-display');
     if (lbl) lbl.textContent = 'Tap a site on the diagram';
     var btn = document.getElementById('site-picker-log-btn');
@@ -1873,14 +1883,15 @@ function showSitePickerModal(peptideId, scheduledTime) {
 
 async function confirmSitePickerLog() {
     closeModal('site-picker-modal');
-    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite);
+    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite, sitePickerDate);
 }
 
-async function quickLogDose(peptideId, scheduledTime, site) {
+async function quickLogDose(peptideId, scheduledTime, site, dateStr) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
-    var todayStr = localDateStr(now);
+    // dateStr is set when logging a missed past dose from the calendar; defaults to today.
+    var doseDate = dateStr || localDateStr(now);
     var timeStr  = scheduledTime || (String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
     var du       = dispUnit(p);
     var dAmt     = dispAmt(p.dailyDose, p) || 0;
@@ -1907,14 +1918,15 @@ async function quickLogDose(peptideId, scheduledTime, site) {
     var hasActive = (appData.cycles || []).some(function(c) { return c.peptideId === p.id && c.status === 'active'; });
     if (!hasActive && p.cycleDuration) {
         var cyclesBefore = (appData.cycles || []).length;
-        startCycle(p.id, todayStr);
+        // Cycle starts on the same day as the first dose (backdated for missed-dose logs).
+        startCycle(p.id, doseDate);
         if ((appData.cycles || []).length > cyclesBefore) {
             snapshot.cycleStartedId = appData.cycles[appData.cycles.length - 1].id;
         }
     }
     var dose = {
         id: genId(), peptideId: p.id, peptideName: p.name,
-        date: todayStr, time: timeStr,
+        date: doseDate, time: timeStr,
         amount: dAmt, unit: du,
         site: site || null, notes: null, loggedAt: now.toISOString()
     };
@@ -1926,7 +1938,7 @@ async function quickLogDose(peptideId, scheduledTime, site) {
 
     renderTodaySchedule();
     renderDashCalendar();
-    renderDashDayDetail(selectedDashDate || todayStr);
+    renderDashDayDetail(selectedDashDate || doseDate);
     renderHistory();
     renderSupply();
     renderLogDosePlate();
@@ -2014,6 +2026,7 @@ function renderDashDayDetail(dateStr) {
 
     var todayStr    = localDateStr();
     var isToday     = dateStr === todayStr;
+    var isFuture    = dateStr > todayStr;  // YYYY-MM-DD strings sort lexically
     var scheduled   = getScheduleForDay(dateStr);
     var loggedDoses = (appData.doses || []).filter(function(x) { return x.date === dateStr; });
 
@@ -2032,13 +2045,23 @@ function renderDashDayDetail(dateStr) {
             var slotLabel  = multiTimes ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
             var ri2 = calcReconInfo(p);
             var unitsHint2 = (ri2 && p.dailyDose) ? '<span style="color:' + col + ';font-weight:700;">' + ri2.units.toFixed(1) + ' units</span> · ' : '';
-            var actionHtml = isToday
-                ? (item.taken
+            // Action treatment depends on past/today/future + taken state:
+            //   future + untaken → '—' (can't log ahead of time)
+            //   past   + untaken → "Log" button (catch up on missed dose, backdates to dateStr)
+            //   today  + untaken → "Take" button (existing behavior)
+            //   today  + taken   → "✓ Taken" undo button
+            //   past   + taken   → "✓" indicator (edit/delete via Logged section below)
+            var actionHtml;
+            if (item.taken) {
+                actionHtml = isToday
                     ? '<button class="dash-take-btn dash-taken" onclick="undoQuickLog(\'' + item.doseId + '\')">✓ Taken</button>'
-                    : '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="showSitePickerModal(\'' + p.id + '\',\'' + (item.time || '') + '\')">Take</button>')
-                : (item.taken
-                    ? '<span style="color:var(--success);font-size:0.8rem;font-weight:600;">✓</span>'
-                    : '<span style="color:var(--text-secondary);font-size:0.8rem;">—</span>');
+                    : '<span style="color:var(--success);font-size:0.8rem;font-weight:600;">✓</span>';
+            } else if (isFuture) {
+                actionHtml = '<span style="color:var(--text-secondary);font-size:0.8rem;">—</span>';
+            } else {
+                var label = isToday ? 'Take' : 'Log';
+                actionHtml = '<button class="dash-take-btn" style="border-color:' + col + ';color:' + col + ';" onclick="showSitePickerModal(\'' + p.id + '\',\'' + (item.time || '') + '\',\'' + dateStr + '\')">' + label + '</button>';
+            }
             return '<div class="dash-dose-row">' +
                 '<span class="color-dot" style="background:' + col + ';width:10px;height:10px;flex-shrink:0;"></span>' +
                 '<div class="dash-dose-info">' +
