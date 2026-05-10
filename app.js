@@ -948,6 +948,11 @@ document.getElementById('dose-form').addEventListener('submit', async function(e
     if (noteCard) noteCard.style.display = 'none';
     logDoseState.noteOpen = false;
 
+    // Clear date/time/amount so next renderLogDosePlate fills fresh defaults
+    document.getElementById('dose-date').value   = '';
+    document.getElementById('dose-time').value   = '';
+    document.getElementById('dose-amount').value = '';
+
     showLoggedScreen(dose, p);
 });
 
@@ -1128,13 +1133,18 @@ function renderLogDosePlate() {
     var pepSelect = document.getElementById('ld-pep-select');
     if (pepSelect) pepSelect.value = p.id;
 
-    // Sync form inputs (visible amount/time inputs feed the existing submit handler)
+    // Sync form inputs — only fill defaults when empty so that user edits
+    // and calendar-chosen dates/times survive site changes and re-renders.
     document.getElementById('dose-peptide').value = p.id;
-    document.getElementById('dose-date').value    = localDateStr();
-    var now = new Date();
-    document.getElementById('dose-time').value =
-        String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-    if (p.dailyDose) document.getElementById('dose-amount').value = dispAmt(p.dailyDose, p);
+    var dateEl = document.getElementById('dose-date');
+    if (!dateEl.value) dateEl.value = localDateStr();
+    var timeEl = document.getElementById('dose-time');
+    if (!timeEl.value) {
+        var now = new Date();
+        timeEl.value = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    }
+    var amtEl = document.getElementById('dose-amount');
+    if (p.dailyDose && !amtEl.value) amtEl.value = dispAmt(p.dailyDose, p);
     // Reflect the peptide's display unit in the inline label
     var metaUnitEl = document.getElementById('ld-meta-unit');
     if (metaUnitEl) metaUnitEl.textContent = dispUnit(p);

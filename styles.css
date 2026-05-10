@@ -295,9 +295,21 @@ button {
 .cal-day { min-height:90px; background:var(--bg-secondary); border-radius:6px; padding:6px; border:1px solid var(--border); cursor:pointer; transition:background 0.15s; }
 .cal-day:not(.other-month):hover { background:var(--bg-tertiary); }
 .cal-day.other-month { opacity:0.35; }
-.cal-day.today { border-color:var(--accent); box-shadow:0 0 0 1px rgba(220,38,38,0.25); }
+.cal-day.today { border-color:var(--border); } /* subtle — selected-day provides the strong highlight */
 .cal-day-num { font-weight:600; margin-bottom:4px; color:var(--text-secondary); font-size:0.85rem; }
-.cal-day.today .cal-day-num { color:var(--accent); }
+.cal-day.today .cal-day-num { color:var(--accent); } /* red number flags today without stealing selected style */
+/* Dot under the number marks today without competing with the selection highlight */
+.cal-day.today .cal-day-num::after {
+    content:'•';
+    display:block;
+    font-size:7px;
+    line-height:1;
+    color:var(--accent);
+    text-align:center;
+    margin-top:-1px;
+}
+/* When today IS the selected day, restore the full accent border */
+.cal-day.today.selected-day { border-color:var(--accent); }
 .cal-dose { font-size:0.65rem; padding:2px 5px; border-radius:3px; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:white; }
 .cal-dots-row { display:none; gap:3px; align-items:center; flex-wrap:wrap; margin-top:3px; }
 .cal-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; display:inline-block; }
