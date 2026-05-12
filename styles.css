@@ -422,6 +422,30 @@ button {
 .modal h2 { margin-bottom:18px; }
 .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
 
+/* ── Site-picker modal — compact layout, sticky actions ───── */
+#site-picker-modal .modal {
+    display: flex;
+    flex-direction: column;
+    padding: 18px 18px 0;       /* actions area provides its own bottom padding */
+    max-height: 92vh;
+}
+#site-picker-modal .modal h2 { margin-bottom: 10px; font-size: 1.05rem; }
+#site-picker-modal .selected-site-display { margin-bottom: 8px; }
+#site-picker-modal .sp-dose-row { margin: 6px 0 10px; padding: 7px 10px; }
+#site-picker-modal .rotation-grid { margin-top: 8px; }
+#site-picker-modal .body-svg { width: 140px; }     /* slimmer silhouettes — both fit side-by-side */
+#site-picker-modal .body-diagram-row { gap: 14px; }
+#site-picker-modal .body-view-toggle { margin-bottom: 10px; }
+#site-picker-modal .modal-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 12px -18px 0;
+    padding: 12px 18px calc(14px + env(safe-area-inset-bottom));
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 2;
+}
+
 /* ── MOBILE BOTTOM NAV ───────────────────────────────────── */
 .bottom-nav {
     display:none; /* shown only on mobile via media query */
