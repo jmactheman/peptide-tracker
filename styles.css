@@ -1135,6 +1135,76 @@ button {
     line-height: 1.4;
 }
 
+/* ── Mode toggle (Quick / Track Vial) ────────────────────── */
+.mode-toggle-wrap {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 16px;
+}
+.mode-btn {
+    flex: 1;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+    line-height: 1.2;
+}
+.mode-btn.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+}
+.mode-btn:not(.active):hover { color: var(--text-primary); }
+
+/* ── Site-picker dose override ───────────────────────────── */
+.sp-dose-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0 14px;
+    padding: 9px 12px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+}
+.sp-dose-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 36px;
+}
+.sp-dose-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    justify-content: flex-end;
+}
+.sp-dose-input {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 16px;
+    color: var(--text-primary);
+    font-family: inherit;
+    width: 90px;
+    text-align: right;
+}
+.sp-dose-unit {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    min-width: 30px;
+}
+
 /* ── Advanced disclosure (Supply add/edit forms) ──────────── */
 .adv-disclosure {
     border: none;

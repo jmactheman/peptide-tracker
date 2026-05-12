@@ -254,27 +254,51 @@ document.getElementById('peptide-display-unit').addEventListener('change', funct
     updateAddPreview();
 });
 
-document.getElementById('peptide-tracking-mode').addEventListener('change', function() {
-    var isSimple = this.value === 'simple';
+// ── MODE TOGGLES ──────────────────────────────────────────────
+function setAddMode(mode) {
+    var isSimple = mode === 'simple';
+    document.getElementById('peptide-tracking-mode').value = mode;
+    document.getElementById('mode-btn-quick').classList.toggle('active', isSimple);
+    document.getElementById('mode-btn-full').classList.toggle('active', !isSimple);
     document.querySelectorAll('#peptide-form .full-mode-only').forEach(function(el) {
         el.style.display = isSimple ? 'none' : '';
     });
-});
+    var vialG = document.getElementById('vial-unit-group');
+    if (vialG) vialG.style.display = isSimple ? 'none' : '';
+    if (isSimple) {
+        var dispG = document.getElementById('display-unit-group');
+        if (dispG) dispG.style.display = 'none';
+    } else {
+        updateDoseLabelFromUnit(); // handles display-unit-group based on selected unit
+    }
+}
 
-document.getElementById('edit-tracking-mode').addEventListener('change', function() {
-    var isSimple = this.value === 'simple';
+function setEditMode(mode) {
+    var isSimple = mode === 'simple';
+    document.getElementById('edit-tracking-mode').value = mode;
+    document.getElementById('edit-mode-btn-quick').classList.toggle('active', isSimple);
+    document.getElementById('edit-mode-btn-full').classList.toggle('active', !isSimple);
     document.querySelectorAll('#edit-form .edit-full-only').forEach(function(el) {
         el.style.display = isSimple ? 'none' : '';
     });
-});
+    var editDispG = document.getElementById('edit-display-unit-group');
+    if (editDispG) {
+        var editId = document.getElementById('edit-id').value;
+        var ep = (appData.peptides || []).find(function(x) { return x.id === editId; });
+        editDispG.style.display = (!isSimple && ep && ep.unit === 'mg') ? '' : 'none';
+    }
+}
 
 function updateDoseLabelFromUnit() {
-    var unit  = document.getElementById('peptide-unit').value;
-    var dispG = document.getElementById('display-unit-group');
-    var isMg  = (unit === 'mg');
-    if (dispG) dispG.style.display = isMg ? '' : 'none';
+    var unit    = document.getElementById('peptide-unit').value;
+    var mode    = document.getElementById('peptide-tracking-mode').value;
+    var dispG   = document.getElementById('display-unit-group');
+    var isMg    = (unit === 'mg');
+    var isTrack = (mode === 'full');
+    // Show "Show Doses As" only in Track Vial mode for mg peptides
+    if (dispG) dispG.style.display = (isMg && isTrack) ? '' : 'none';
     var doseDispU = isMg ? document.getElementById('peptide-display-unit').value : (unit === 'IU' ? 'IU' : unit);
-    document.getElementById('dose-label').textContent     = 'Your Dose (' + doseDispU + ')';
+    document.getElementById('dose-label').textContent     = 'My Dose (' + doseDispU + ')';
     document.getElementById('per-vial-label').textContent = unit + ' per Vial *';
 }
 
@@ -384,12 +408,10 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
     document.getElementById('cycle-duration').value = '';
     document.getElementById('doses-per-week').value  = 7;
     document.getElementById('reorder-threshold').value = 5;
-    document.getElementById('dose-label').textContent     = 'Your Dose (mcg)';
+    document.getElementById('dose-label').textContent     = 'My Dose (mcg)';
     document.getElementById('per-vial-label').textContent = 'mg per Vial *';
     document.getElementById('peptide-display-unit').value  = 'mcg';
-    document.getElementById('peptide-tracking-mode').value = 'simple';
-    document.getElementById('display-unit-group').style.display = '';
-    document.querySelectorAll('#peptide-form .full-mode-only').forEach(function(el) { el.style.display = 'none'; });
+    setAddMode('simple');
     selectedColor = PEPTIDE_COLORS[0];
     buildColorPicker('supply-color-picker', function(c) { selectedColor = c; }, PEPTIDE_COLORS[0]);
     buildScheduleUI('supply-sched-container', null);
@@ -581,12 +603,7 @@ function openEdit(id) {
     editSelectedColor = p.color || PEPTIDE_COLORS[0];
     buildColorPicker('edit-color-picker', function(c) { editSelectedColor = c; }, editSelectedColor);
     buildScheduleUI('edit-sched-container', p.schedule || null);
-    var editIsSimple = (p.trackingMode || 'simple') === 'simple';
-    document.querySelectorAll('#edit-form .edit-full-only').forEach(function(el) {
-        el.style.display = editIsSimple ? 'none' : '';
-    });
-    var editDispG = document.getElementById('edit-display-unit-group');
-    if (editDispG) editDispG.style.display = (p.unit === 'mg') ? '' : 'none';
+    setEditMode(p.trackingMode || 'simple');
     document.getElementById('edit-modal').classList.add('active');
 }
 
@@ -1879,16 +1896,25 @@ function showSitePickerModal(peptideId, scheduledTime, dateStr) {
     if (lbl) lbl.textContent = 'Tap a site on the diagram';
     var btn = document.getElementById('site-picker-log-btn');
     if (btn) btn.disabled = true;
+    // Pre-fill editable dose with peptide default
+    var dInput = document.getElementById('site-picker-dose-input');
+    var dUnitEl = document.getElementById('site-picker-dose-unit');
+    if (dInput && p) {
+        dInput.value = dispAmt(p.dailyDose, p) || '';
+        if (dUnitEl) dUnitEl.textContent = dispUnit(p);
+    }
     document.getElementById('site-picker-modal').classList.add('active');
     renderSiteRotation('site-picker-grid', 'selectSiteForModal');
 }
 
 async function confirmSitePickerLog() {
     closeModal('site-picker-modal');
-    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite, sitePickerDate);
+    var dInput = document.getElementById('site-picker-dose-input');
+    var overrideDose = dInput ? (parseFloat(dInput.value) || null) : null;
+    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite, sitePickerDate, overrideDose);
 }
 
-async function quickLogDose(peptideId, scheduledTime, site, dateStr) {
+async function quickLogDose(peptideId, scheduledTime, site, dateStr, overrideDose) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
@@ -1896,7 +1922,9 @@ async function quickLogDose(peptideId, scheduledTime, site, dateStr) {
     var doseDate = dateStr || localDateStr(now);
     var timeStr  = scheduledTime || (String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
     var du       = dispUnit(p);
-    var dAmt     = dispAmt(p.dailyDose, p) || 0;
+    var dAmt     = (overrideDose !== null && overrideDose !== undefined && overrideDose > 0)
+                   ? overrideDose
+                   : (dispAmt(p.dailyDose, p) || 0);
     if (!dAmt) { alert('Set a dose amount for ' + p.name + ' before quick-logging.'); return; }
 
     // Snapshot pre-state so the logged-screen Undo can fully reverse this
@@ -2324,8 +2352,8 @@ function renderAll() {
 // ── INIT ──────────────────────────────────────────────────────
 async function init() {
     try {
-        // Apply Simple mode defaults on first load
-        document.querySelectorAll('#peptide-form .full-mode-only').forEach(function(el) { el.style.display = 'none'; });
+        // Apply Quick mode defaults on first load
+        setAddMode('simple');
 
         await loadAllData();
         initPeptideDropdown();

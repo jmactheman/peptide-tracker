@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 
@@ -44,7 +44,17 @@
     <div id="supply" class="tab-content">
         <div class="card">
             <h2>Add Peptide to Supply</h2>
+            <!-- Mode toggle -->
+            <div class="mode-toggle-wrap">
+                <button type="button" class="mode-btn active" id="mode-btn-quick" onclick="setAddMode('simple')">🪶 Quick</button>
+                <button type="button" class="mode-btn" id="mode-btn-full" onclick="setAddMode('full')">📦 Track Vial</button>
+            </div>
             <form id="peptide-form">
+                <!-- Hidden select — JS reads .value; toggle buttons set it -->
+                <select id="peptide-tracking-mode" style="display:none;">
+                    <option value="simple">Simple</option>
+                    <option value="full">Track Vial</option>
+                </select>
                 <div class="form-grid">
                     <div class="form-group full-width">
                         <label>Peptide *</label>
@@ -54,7 +64,8 @@
                         <label>Custom Peptide Name *</label>
                         <input type="text" id="peptide-custom-name" placeholder="e.g. My Peptide">
                     </div>
-                    <div class="form-group">
+                    <!-- Vial Unit — hidden in Quick, visible in Track Vial -->
+                    <div class="form-group" id="vial-unit-group" style="display:none;">
                         <label>Vial Unit</label>
                         <p class="form-hint">Unit printed on your vial label (mg, IU, or mL)</p>
                         <select id="peptide-unit">
@@ -63,24 +74,13 @@
                             <option value="mL">mL</option>
                         </select>
                     </div>
-                    <div class="form-group" id="display-unit-group">
-                        <details class="adv-disclosure">
-                            <summary class="adv-summary">Advanced</summary>
-                            <div class="adv-field">
-                                <label>Show Doses As</label>
-                                <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
-                                <select id="peptide-display-unit">
-                                    <option value="mcg">mcg</option>
-                                    <option value="mg">mg</option>
-                                </select>
-                            </div>
-                        </details>
-                    </div>
-                    <div class="form-group">
-                        <label>Tracking Mode</label>
-                        <select id="peptide-tracking-mode">
-                            <option value="simple">Simple</option>
-                            <option value="full">Track Vial</option>
+                    <!-- Show Doses As — hidden in Quick; shown in Track Vial when unit=mg -->
+                    <div class="form-group" id="display-unit-group" style="display:none;">
+                        <label>Show Doses As</label>
+                        <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
+                        <select id="peptide-display-unit">
+                            <option value="mcg">mcg</option>
+                            <option value="mg">mg</option>
                         </select>
                     </div>
                     <div class="form-group full-mode-only">
@@ -96,7 +96,7 @@
                         <input type="number" id="kits-on-hand" min="0" value="1">
                     </div>
                     <div class="form-group">
-                        <label id="dose-label">Your Dose (mcg)</label>
+                        <label id="dose-label">My Dose (mcg)</label>
                         <input type="number" id="daily-dose" step="0.01" min="0" placeholder="e.g. 250">
                     </div>
                     <div class="form-group">
@@ -455,33 +455,31 @@
 <div class="modal-overlay" id="edit-modal">
     <div class="modal">
         <h2>✏️ Edit Supply</h2>
+        <!-- Mode toggle -->
+        <div class="mode-toggle-wrap" style="margin-bottom:14px;">
+            <button type="button" class="mode-btn" id="edit-mode-btn-quick" onclick="setEditMode('simple')">🪶 Quick</button>
+            <button type="button" class="mode-btn" id="edit-mode-btn-full" onclick="setEditMode('full')">📦 Track Vial</button>
+        </div>
         <form id="edit-form">
             <input type="hidden" id="edit-id">
+            <!-- Hidden select — JS reads .value; toggle sets it -->
+            <select id="edit-tracking-mode" style="display:none;">
+                <option value="simple">Simple</option>
+                <option value="full">Track Vial</option>
+            </select>
             <div class="form-grid">
-                <div class="form-group">
-                    <label>Tracking Mode</label>
-                    <select id="edit-tracking-mode">
-                        <option value="simple">Simple</option>
-                        <option value="full">Track Vial</option>
-                    </select>
-                </div>
                 <div class="form-group edit-full-only"><label>Vials on Hand</label><input type="number" id="edit-vials" min="0" value="0"></div>
-                <div class="form-group"><label id="edit-dose-label">Your Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
+                <div class="form-group"><label id="edit-dose-label">My Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
                 <div class="form-group edit-full-only"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
                 <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
-                <div class="form-group" id="edit-display-unit-group">
-                    <details class="adv-disclosure">
-                        <summary class="adv-summary">Advanced</summary>
-                        <div class="adv-field">
-                            <label>Show Doses As</label>
-                            <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
-                            <select id="edit-display-unit">
-                                <option value="mcg">mcg</option>
-                                <option value="mg">mg</option>
-                            </select>
-                        </div>
-                    </details>
+                <div class="form-group" id="edit-display-unit-group" style="display:none;">
+                    <label>Show Doses As</label>
+                    <p class="form-hint">For mg peptides — show as mcg (250 mcg) or mg (0.25 mg)</p>
+                    <select id="edit-display-unit">
+                        <option value="mcg">mcg</option>
+                        <option value="mg">mg</option>
+                    </select>
                 </div>
             </div>
             <div class="form-group" style="margin-top:14px;">
@@ -531,6 +529,15 @@
     <div class="modal">
         <h2 id="site-picker-title">💉 Choose Injection Site</h2>
         <div class="selected-site-display" id="site-picker-selected-display">Tap a site on the diagram</div>
+        <!-- Editable dose override -->
+        <div class="sp-dose-row">
+            <span class="sp-dose-label">Dose</span>
+            <div class="sp-dose-wrap">
+                <input type="number" class="sp-dose-input" id="site-picker-dose-input"
+                       step="0.01" min="0" inputmode="decimal">
+                <span class="sp-dose-unit" id="site-picker-dose-unit">mcg</span>
+            </div>
+        </div>
         <div class="rotation-grid" id="site-picker-grid"></div>
         <div class="modal-actions">
             <button type="button" class="btn-ghost btn-small" onclick="closeModal('site-picker-modal')">Cancel</button>
@@ -593,9 +600,9 @@
     </div>
 </div>
 
-<script src="data.js?v=9"></script>
-<script src="db.js?v=9"></script>
-<script src="app.js?v=9"></script>
+<script src="data.js?v=10"></script>
+<script src="db.js?v=10"></script>
+<script src="app.js?v=10"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
