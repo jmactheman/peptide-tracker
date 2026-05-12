@@ -2078,7 +2078,7 @@ function showSitePickerModal(peptideId, scheduledTime, dateStr) {
         var suffix = (dateStr && dateStr !== todayStr)
             ? ' (' + new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ')'
             : '';
-        title.textContent = '💉 ' + p.name + suffix + ' — Choose Site';
+        title.textContent = '💉 ' + p.name + suffix;
     }
     var lbl = document.getElementById('site-picker-selected-display');
     if (lbl) lbl.textContent = 'Tap a site on the diagram';

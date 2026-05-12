@@ -433,9 +433,9 @@ button {
 #site-picker-modal .selected-site-display { margin-bottom: 8px; }
 #site-picker-modal .sp-dose-row { margin: 6px 0 10px; padding: 7px 10px; }
 #site-picker-modal .rotation-grid { margin-top: 8px; }
-#site-picker-modal .body-svg { width: 140px; }     /* slimmer silhouettes — both fit side-by-side */
 #site-picker-modal .body-diagram-row { gap: 14px; }
-#site-picker-modal .body-view-toggle { margin-bottom: 10px; }
+#site-picker-modal .body-view-toggle { margin-bottom: 8px; }
+#site-picker-modal .body-legend { display: none; }  /* dot colors are self-evident in context; saves ~80px */
 #site-picker-modal .modal-actions {
     position: sticky;
     bottom: 0;
