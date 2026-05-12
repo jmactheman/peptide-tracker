@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=10">
+    <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 
@@ -96,8 +96,18 @@
                         <input type="number" id="kits-on-hand" min="0" value="1">
                     </div>
                     <div class="form-group">
-                        <label id="dose-label">My Dose (mcg)</label>
-                        <input type="number" id="daily-dose" step="0.01" min="0" placeholder="e.g. 250">
+                        <label id="dose-label">My Dose</label>
+                        <div class="dose-row">
+                            <input type="number" id="daily-dose" step="0.01" min="0" placeholder="e.g. 0.5">
+                            <select id="quick-dose-unit" class="dose-unit-select" style="display:none;">
+                                <option value="mcg">mcg</option>
+                                <option value="mg" selected>mg</option>
+                                <option value="IU">IU</option>
+                                <option value="mL">mL</option>
+                                <option value="units">units</option>
+                            </select>
+                        </div>
+                        <button type="button" class="calc-link" id="dose-calc-link" style="display:none;" onclick="openUnitCalc('daily-dose','quick-dose-unit')">🧮 What's this in units?</button>
                     </div>
                     <div class="form-group">
                         <label>Doses per Week</label>
@@ -469,7 +479,20 @@
             </select>
             <div class="form-grid">
                 <div class="form-group edit-full-only"><label>Vials on Hand</label><input type="number" id="edit-vials" min="0" value="0"></div>
-                <div class="form-group"><label id="edit-dose-label">My Dose (mcg)</label><input type="number" id="edit-dose" step="0.01" min="0"></div>
+                <div class="form-group">
+                    <label id="edit-dose-label">My Dose</label>
+                    <div class="dose-row">
+                        <input type="number" id="edit-dose" step="0.01" min="0">
+                        <select id="edit-quick-dose-unit" class="dose-unit-select" style="display:none;">
+                            <option value="mcg">mcg</option>
+                            <option value="mg">mg</option>
+                            <option value="IU">IU</option>
+                            <option value="mL">mL</option>
+                            <option value="units">units</option>
+                        </select>
+                    </div>
+                    <button type="button" class="calc-link" id="edit-dose-calc-link" style="display:none;" onclick="openUnitCalc('edit-dose','edit-quick-dose-unit')">🧮 What's this in units?</button>
+                </div>
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
                 <div class="form-group edit-full-only"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
                 <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
@@ -582,6 +605,49 @@
     </div>
 </div>
 
+<!-- ── UNIT CALCULATOR MODAL ──────────────────────────────── -->
+<div class="modal-overlay" id="unit-calc-modal">
+    <div class="modal">
+        <h2>🧮 Unit Calculator</h2>
+        <p class="calc-blurb">Find out how many syringe units to draw from a reconstituted vial. Nothing is saved — just a quick conversion.</p>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Vial Strength</label>
+                <div class="dose-row">
+                    <input type="number" id="calc-vial-mg" step="0.1" min="0.01" placeholder="e.g. 10">
+                    <span class="dose-suffix">mg</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>BAC Water</label>
+                <div class="dose-row">
+                    <input type="number" id="calc-bac-ml" step="0.1" min="0.01" placeholder="e.g. 2">
+                    <span class="dose-suffix">mL</span>
+                </div>
+            </div>
+            <div class="form-group full-width">
+                <label>Your Dose</label>
+                <div class="dose-row">
+                    <input type="number" id="calc-dose-amt" step="0.01" min="0" placeholder="e.g. 0.5">
+                    <select id="calc-dose-unit" class="dose-unit-select">
+                        <option value="mcg">mcg</option>
+                        <option value="mg" selected>mg</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="calc-result-box">
+            <div class="calc-result-eyebrow">Draw to</div>
+            <div class="calc-result-value" id="calc-result-value">—</div>
+            <div class="calc-result-unit">units on syringe</div>
+            <div class="calc-result-note" id="calc-result-note">Fill in the fields above</div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('unit-calc-modal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- ── LOGGED CONFIRMATION OVERLAY (top-level so it can overlay any tab) ── -->
 <div id="ld-logged-screen" class="ld-logged-screen" style="display:none;">
     <div class="ld-logged-body">
@@ -600,9 +666,9 @@
     </div>
 </div>
 
-<script src="data.js?v=10"></script>
-<script src="db.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="data.js?v=11"></script>
+<script src="db.js?v=11"></script>
+<script src="app.js?v=11"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

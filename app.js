@@ -35,6 +35,7 @@ function dispUnit(p) { // display unit (respects per-peptide preference)
     if (!p) return 'mcg';
     if (p.unit === 'IU') return 'IU';
     if (p.unit === 'mL') return 'mL';
+    if (p.unit === 'units') return 'units';
     return p.displayUnit || 'mcg';
 }
 function dispAmt(mcgAmt, p) { // convert stored mcg amount to display unit
@@ -239,6 +240,14 @@ document.getElementById('peptide-select').addEventListener('change', function() 
         if (IU_DEFAULTS.has(val))      unitSel.value = 'IU';
         else if (ML_DEFAULTS.has(val)) unitSel.value = 'mL';
         else                           unitSel.value = 'mg';
+        // Sync Quick-mode dose-unit dropdown so it matches the peptide's natural unit
+        // (user can still override to 'units' or other choices)
+        var qduSel = document.getElementById('quick-dose-unit');
+        if (qduSel) {
+            if (IU_DEFAULTS.has(val))      qduSel.value = 'IU';
+            else if (ML_DEFAULTS.has(val)) qduSel.value = 'mL';
+            else                           qduSel.value = 'mg';
+        }
     }
     updateDoseLabelFromUnit();
     updateAddPreview();
@@ -265,15 +274,29 @@ function setAddMode(mode) {
     });
     var vialG = document.getElementById('vial-unit-group');
     if (vialG) vialG.style.display = isSimple ? 'none' : '';
+    // Quick-mode dose-unit dropdown + calculator link
+    var qdu  = document.getElementById('quick-dose-unit');
+    var clk  = document.getElementById('dose-calc-link');
+    if (qdu) qdu.style.display = isSimple ? '' : 'none';
+    if (clk) clk.style.display = isSimple ? '' : 'none';
     if (isSimple) {
         var dispG = document.getElementById('display-unit-group');
         if (dispG) dispG.style.display = 'none';
+        // Reset dose label (no unit suffix — the dropdown is the unit indicator)
+        document.getElementById('dose-label').textContent = 'My Dose';
     } else {
-        updateDoseLabelFromUnit(); // handles display-unit-group based on selected unit
+        updateDoseLabelFromUnit(); // handles display-unit-group + dose-label in Track Vial mode
     }
 }
 
 function setEditMode(mode) {
+    var editId = document.getElementById('edit-id').value;
+    var ep = (appData.peptides || []).find(function(x) { return x.id === editId; });
+    // Block switching a units-peptide to Track Vial mode (no vial concentration to back the math)
+    if (mode === 'full' && ep && ep.unit === 'units') {
+        alert('This peptide is tracked in syringe units, so Track Vial mode has nothing to track from. Delete and re-add it with mg, IU, or mL to switch.');
+        mode = 'simple';
+    }
     var isSimple = mode === 'simple';
     document.getElementById('edit-tracking-mode').value = mode;
     document.getElementById('edit-mode-btn-quick').classList.toggle('active', isSimple);
@@ -283,9 +306,80 @@ function setEditMode(mode) {
     });
     var editDispG = document.getElementById('edit-display-unit-group');
     if (editDispG) {
-        var editId = document.getElementById('edit-id').value;
-        var ep = (appData.peptides || []).find(function(x) { return x.id === editId; });
         editDispG.style.display = (!isSimple && ep && ep.unit === 'mg') ? '' : 'none';
+    }
+    // Quick-mode dose-unit dropdown + calculator link
+    var eqdu = document.getElementById('edit-quick-dose-unit');
+    var eclk = document.getElementById('edit-dose-calc-link');
+    if (eqdu) eqdu.style.display = isSimple ? '' : 'none';
+    if (eclk) eclk.style.display = isSimple ? '' : 'none';
+    // Edit dose label
+    var edl = document.getElementById('edit-dose-label');
+    if (edl) edl.textContent = isSimple ? 'My Dose' : ('My Dose (' + (ep ? dispUnit(ep) : 'mcg') + ')');
+}
+
+// ── UNIT CALCULATOR ───────────────────────────────────────────
+// On-demand "what's this in syringe units?" tool. Pure UI; nothing is saved.
+// Pre-fills dose from whichever form invoked it.
+function openUnitCalc(srcInputId, srcUnitId) {
+    var srcInput = srcInputId && document.getElementById(srcInputId);
+    var srcUnit  = srcUnitId  && document.getElementById(srcUnitId);
+    var calcAmt  = document.getElementById('calc-dose-amt');
+    var calcUnit = document.getElementById('calc-dose-unit');
+    var calcVial = document.getElementById('calc-vial-mg');
+    var calcBac  = document.getElementById('calc-bac-ml');
+    if (calcVial) calcVial.value = '';
+    if (calcBac)  calcBac.value  = '';
+    if (calcAmt) {
+        calcAmt.value = (srcInput && srcInput.value) ? srcInput.value : '';
+    }
+    if (calcUnit) {
+        var u = srcUnit && srcUnit.value;
+        // Calculator only handles mcg and mg input units (the math needs a mass)
+        calcUnit.value = (u === 'mcg') ? 'mcg' : 'mg';
+    }
+    updateUnitCalcResult();
+    document.getElementById('unit-calc-modal').classList.add('active');
+}
+
+function updateUnitCalcResult() {
+    var vialMg  = parseFloat(document.getElementById('calc-vial-mg').value);
+    var bacML   = parseFloat(document.getElementById('calc-bac-ml').value);
+    var doseAmt = parseFloat(document.getElementById('calc-dose-amt').value);
+    var doseUnit= document.getElementById('calc-dose-unit').value;
+    var resultEl= document.getElementById('calc-result-value');
+    var noteEl  = document.getElementById('calc-result-note');
+    if (!resultEl || !noteEl) return;
+    if (!vialMg || !bacML || !doseAmt || vialMg <= 0 || bacML <= 0 || doseAmt <= 0) {
+        resultEl.textContent = '—';
+        noteEl.textContent = 'Fill in the fields above';
+        return;
+    }
+    var doseMg = (doseUnit === 'mcg') ? doseAmt / 1000 : doseAmt;
+    var conc   = vialMg / bacML;      // mg per mL
+    var volMl  = doseMg / conc;       // mL to draw
+    var units  = volMl * 100;         // U-100 syringe convention
+    resultEl.textContent = units.toFixed(1);
+    noteEl.textContent = doseAmt + ' ' + doseUnit + ' from a ' + vialMg + ' mg vial reconstituted in ' + bacML + ' mL';
+}
+
+// Map a Quick-mode dose-unit selection (mcg|mg|IU|mL|units) + raw user input
+// into the peptide storage triple (unit, displayUnit, dailyDose).
+// Keeps the existing convention for mg/mcg/IU/mL (no convention drift); introduces
+// a new sentinel p.unit='units' for the syringe-units case.
+function quickDoseUnitToStorage(qdu, rawDose) {
+    switch (qdu) {
+        case 'units':
+            return { unit: 'units', displayUnit: 'units', dailyDose: rawDose };
+        case 'mg':
+            return { unit: 'mg', displayUnit: 'mg', dailyDose: rawDose * 1000 };
+        case 'IU':
+            return { unit: 'IU', displayUnit: 'mcg', dailyDose: rawDose };
+        case 'mL':
+            return { unit: 'mL', displayUnit: 'mcg', dailyDose: rawDose };
+        case 'mcg':
+        default:
+            return { unit: 'mg', displayUnit: 'mcg', dailyDose: rawDose };
     }
 }
 
@@ -305,6 +399,14 @@ function updateDoseLabelFromUnit() {
 ['peptide-mg','peptide-vpk','kits-on-hand','daily-dose','doses-per-week','cycle-duration'].forEach(function(id) {
     document.getElementById(id).addEventListener('input', updateAddPreview);
 });
+
+// Live updates for the Unit Calculator modal
+['calc-vial-mg','calc-bac-ml','calc-dose-amt'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateUnitCalcResult);
+});
+var calcUnitEl = document.getElementById('calc-dose-unit');
+if (calcUnitEl) calcUnitEl.addEventListener('change', updateUnitCalcResult);
 
 function getFormPeptideName() {
     var sel = document.getElementById('peptide-select').value;
@@ -368,14 +470,26 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
 
     if (!isSimple && (!mg || mg <= 0)) { alert('Enter a valid amount per vial.'); return; }
 
-    var dUnit    = document.getElementById('peptide-display-unit').value;
     var rawDose  = parseFloat(document.getElementById('daily-dose').value) || 0;
-    var dailyMcg = (dUnit === 'mg' && unit === 'mg') ? rawDose * 1000 : rawDose;
+    var dUnit, finalUnit, dailyMcg;
+    if (isSimple) {
+        // Quick mode — user picked dose unit directly from #quick-dose-unit
+        var qdu = document.getElementById('quick-dose-unit').value || 'mcg';
+        var mapped = quickDoseUnitToStorage(qdu, rawDose);
+        finalUnit = mapped.unit;
+        dUnit     = mapped.displayUnit;
+        dailyMcg  = mapped.dailyDose;
+    } else {
+        // Track Vial mode — use Vial Unit + Show Doses As (existing convention)
+        dUnit     = document.getElementById('peptide-display-unit').value;
+        finalUnit = unit;
+        dailyMcg  = (dUnit === 'mg' && unit === 'mg') ? rawDose * 1000 : rawDose;
+    }
     var p = {
-        id: genId(), name: name, mgPerVial: mg, unit: unit, vialsPerKit: vpk,
+        id: genId(), name: name, mgPerVial: mg, unit: finalUnit, vialsPerKit: vpk,
         vialsOnHand: isSimple ? 0 : (kits * vpk),
         dailyDose:       dailyMcg,
-        displayUnit:     (unit === 'mg') ? dUnit : 'mcg',
+        displayUnit:     (finalUnit === 'mg') ? dUnit : (finalUnit === 'units' ? 'units' : 'mcg'),
         trackingMode:    document.getElementById('peptide-tracking-mode').value || 'simple',
         dosesPerWeek:    parseInt(document.getElementById('doses-per-week').value) || 7,
         cycleDuration:   parseInt(document.getElementById('cycle-duration').value) || 0,
@@ -408,9 +522,11 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
     document.getElementById('cycle-duration').value = '';
     document.getElementById('doses-per-week').value  = 7;
     document.getElementById('reorder-threshold').value = 5;
-    document.getElementById('dose-label').textContent     = 'My Dose (mcg)';
+    document.getElementById('dose-label').textContent     = 'My Dose';
     document.getElementById('per-vial-label').textContent = 'mg per Vial *';
     document.getElementById('peptide-display-unit').value  = 'mcg';
+    var qduReset = document.getElementById('quick-dose-unit');
+    if (qduReset) qduReset.value = 'mg';
     setAddMode('simple');
     selectedColor = PEPTIDE_COLORS[0];
     buildColorPicker('supply-color-picker', function(c) { selectedColor = c; }, PEPTIDE_COLORS[0]);
@@ -588,6 +704,17 @@ async function finishVial(id) {
 }
 
 // ── EDIT ─────────────────────────────────────────────────────
+// Reverse-map a stored peptide's (unit, displayUnit) back to the Quick-mode
+// dose-unit selector value: mcg | mg | IU | mL | units
+function peptideToQuickDoseUnit(p) {
+    if (!p) return 'mcg';
+    if (p.unit === 'units') return 'units';
+    if (p.unit === 'IU')    return 'IU';
+    if (p.unit === 'mL')    return 'mL';
+    // mg vial: mcg if displayUnit is mcg (or unset), mg if displayUnit is mg
+    return (p.displayUnit === 'mg') ? 'mg' : 'mcg';
+}
+
 function openEdit(id) {
     var p = appData.peptides.find(function(x) { return x.id === id; });
     if (!p) return;
@@ -597,12 +724,23 @@ function openEdit(id) {
     document.getElementById('edit-dpw').value             = p.dosesPerWeek;
     document.getElementById('edit-cycle-dur').value       = p.cycleDuration || '';
     document.getElementById('edit-reorder').value         = p.reorderThreshold || 5;
-    document.getElementById('edit-display-unit').value    = p.displayUnit || 'mcg';
+    document.getElementById('edit-display-unit').value    = (p.displayUnit === 'mg') ? 'mg' : 'mcg';
+    document.getElementById('edit-quick-dose-unit').value = peptideToQuickDoseUnit(p);
     document.getElementById('edit-tracking-mode').value   = p.trackingMode || 'simple';
-    document.getElementById('edit-dose-label').textContent = 'Your Dose (' + dispUnit(p) + ')';
     editSelectedColor = p.color || PEPTIDE_COLORS[0];
     buildColorPicker('edit-color-picker', function(c) { editSelectedColor = c; }, editSelectedColor);
     buildScheduleUI('edit-sched-container', p.schedule || null);
+    // Disable Track Vial toggle for units-peptides (no vial concentration to track)
+    var trackBtn = document.getElementById('edit-mode-btn-full');
+    if (trackBtn) {
+        if (p.unit === 'units') {
+            trackBtn.disabled = true;
+            trackBtn.title = 'Track Vial requires mg, IU, or mL vials';
+        } else {
+            trackBtn.disabled = false;
+            trackBtn.title = '';
+        }
+    }
     setEditMode(p.trackingMode || 'simple');
     document.getElementById('edit-modal').classList.add('active');
 }
@@ -612,12 +750,22 @@ document.getElementById('edit-form').addEventListener('submit', async function(e
     var id = document.getElementById('edit-id').value;
     var p  = appData.peptides.find(function(x) { return x.id === id; });
     if (!p) return;
-    var newDUnit   = document.getElementById('edit-display-unit').value;
     var rawDose    = parseFloat(document.getElementById('edit-dose').value) || 0;
     var editSimple = document.getElementById('edit-tracking-mode').value === 'simple';
     p.vialsOnHand      = editSimple ? (p.vialsOnHand || 0) : (parseInt(document.getElementById('edit-vials').value) || 0);
-    p.dailyDose        = (newDUnit === 'mg' && p.unit === 'mg') ? rawDose * 1000 : rawDose;
-    p.displayUnit      = (p.unit === 'mg') ? newDUnit : 'mcg';
+    if (editSimple) {
+        // Quick mode — user may have changed dose-unit dropdown; remap storage triple
+        var eqdu = document.getElementById('edit-quick-dose-unit').value || 'mcg';
+        var mapped = quickDoseUnitToStorage(eqdu, rawDose);
+        p.unit        = mapped.unit;
+        p.displayUnit = mapped.displayUnit;
+        p.dailyDose   = mapped.dailyDose;
+    } else {
+        // Track Vial mode — existing convention (vial unit immutable)
+        var newDUnit = document.getElementById('edit-display-unit').value;
+        p.dailyDose   = (newDUnit === 'mg' && p.unit === 'mg') ? rawDose * 1000 : rawDose;
+        p.displayUnit = (p.unit === 'mg') ? newDUnit : 'mcg';
+    }
     p.trackingMode     = document.getElementById('edit-tracking-mode').value || 'simple';
     p.dosesPerWeek     = parseInt(document.getElementById('edit-dpw').value) || 7;
     p.cycleDuration    = parseInt(document.getElementById('edit-cycle-dur').value) || 0;
@@ -2161,10 +2309,11 @@ function openCreateProtocolModal() {
         return;
     }
     list.innerHTML = appData.peptides.map(function(p) {
+        var vialInfo = p.mgPerVial ? (p.mgPerVial + ' ' + p.unit + '/vial, ') : '';
         return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">' +
                '<input type="checkbox" value="' + p.id + '" style="width:16px;height:16px;accent-color:var(--accent);">' +
                '<span class="color-dot" style="background:' + (p.color || 'var(--accent)') + '"></span>' +
-               '<span>' + escapeHtml(p.name) + ' — ' + p.mgPerVial + p.unit + '/vial, ' + p.dailyDose + ' ' + doseUnit(p) + ' × ' + p.dosesPerWeek + '/wk</span></label>';
+               '<span>' + escapeHtml(p.name) + ' — ' + vialInfo + dispAmt(p.dailyDose, p) + ' ' + dispUnit(p) + ' × ' + p.dosesPerWeek + '/wk</span></label>';
     }).join('');
     document.getElementById('protocol-modal').classList.add('active');
 }
