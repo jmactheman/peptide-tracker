@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=11">
+    <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
 
@@ -552,13 +552,19 @@
     <div class="modal">
         <h2 id="site-picker-title">💉 Choose Injection Site</h2>
         <div class="selected-site-display" id="site-picker-selected-display">Tap a site on the diagram</div>
-        <!-- Editable dose override -->
+        <!-- Editable dose override (amount + unit) -->
         <div class="sp-dose-row">
             <span class="sp-dose-label">Dose</span>
             <div class="sp-dose-wrap">
                 <input type="number" class="sp-dose-input" id="site-picker-dose-input"
                        step="0.01" min="0" inputmode="decimal">
-                <span class="sp-dose-unit" id="site-picker-dose-unit">mcg</span>
+                <select class="sp-dose-unit-select" id="site-picker-dose-unit">
+                    <option value="mcg">mcg</option>
+                    <option value="mg">mg</option>
+                    <option value="IU">IU</option>
+                    <option value="mL">mL</option>
+                    <option value="units">units</option>
+                </select>
             </div>
         </div>
         <div class="rotation-grid" id="site-picker-grid"></div>
@@ -666,9 +672,9 @@
     </div>
 </div>
 
-<script src="data.js?v=11"></script>
-<script src="db.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="data.js?v=12"></script>
+<script src="db.js?v=12"></script>
+<script src="app.js?v=12"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

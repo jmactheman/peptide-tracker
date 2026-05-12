@@ -47,6 +47,46 @@ function toMcg(amt, p) { // convert display unit value back to mcg for storage/c
     return amt * 1000;
 }
 function mlToUnits(ml) { return ml * 100; }
+
+// Convert a (amount, unit) dose into the peptide's canonical vial-depletion unit:
+//   mg-vials  → mcg
+//   IU-vials  → IU
+//   mL-vials  → mL
+// Used when logging a dose that may have been entered in a different unit than
+// the peptide's storage convention (e.g. user types "10 units" for a mg vial).
+// Returns 0 if the conversion isn't possible (e.g. units without reconstitution).
+function doseToVialDepletion(amount, unit, p) {
+    if (!amount || !p) return 0;
+    var pUnit = p.unit;
+
+    // mg-vial peptide → depletion in mcg
+    if (pUnit === 'mg' || pUnit === undefined) {
+        if (unit === 'mcg') return amount;
+        if (unit === 'mg')  return amount * 1000;
+        if (unit === 'units' && p.reconstituted && p.mgPerVial) {
+            var concMg = p.mgPerVial / p.reconstituted.waterMl; // mg/mL
+            return (amount / 100) * concMg * 1000;              // → mcg
+        }
+        return 0;
+    }
+    // IU-vial peptide → depletion in IU
+    if (pUnit === 'IU') {
+        if (unit === 'IU') return amount;
+        if (unit === 'units' && p.reconstituted && p.mgPerVial) {
+            var concIU = p.mgPerVial / p.reconstituted.waterMl; // IU/mL
+            return (amount / 100) * concIU;                     // → IU
+        }
+        return 0;
+    }
+    // mL-vial peptide → depletion in mL
+    if (pUnit === 'mL') {
+        if (unit === 'mL')    return amount;
+        if (unit === 'units') return amount / 100;
+        return 0;
+    }
+    // units peptide (Quick mode, no vial) — no depletion math applies
+    return 0;
+}
 function getPeptideColor(p) { return (p && p.color) ? p.color : 'var(--accent)'; }
 
 function escapeHtml(s) {
@@ -2044,12 +2084,26 @@ function showSitePickerModal(peptideId, scheduledTime, dateStr) {
     if (lbl) lbl.textContent = 'Tap a site on the diagram';
     var btn = document.getElementById('site-picker-log-btn');
     if (btn) btn.disabled = true;
-    // Pre-fill editable dose with peptide default
+    // Pre-fill editable dose with peptide default.
+    // For reconstituted Track Vial peptides, default to syringe units (what the
+    // user actually reads off their syringe) since "I took 10u" is the natural
+    // way they describe a dose change.
     var dInput = document.getElementById('site-picker-dose-input');
     var dUnitEl = document.getElementById('site-picker-dose-unit');
     if (dInput && p) {
-        dInput.value = dispAmt(p.dailyDose, p) || '';
-        if (dUnitEl) dUnitEl.textContent = dispUnit(p);
+        if (p.reconstituted && p.mgPerVial) {
+            var ri = calcReconInfo(p);
+            if (ri && ri.units) {
+                dInput.value = ri.units.toFixed(1);
+                if (dUnitEl) dUnitEl.value = 'units';
+            } else {
+                dInput.value = dispAmt(p.dailyDose, p) || '';
+                if (dUnitEl) dUnitEl.value = dispUnit(p);
+            }
+        } else {
+            dInput.value = dispAmt(p.dailyDose, p) || '';
+            if (dUnitEl) dUnitEl.value = dispUnit(p);
+        }
     }
     document.getElementById('site-picker-modal').classList.add('active');
     renderSiteRotation('site-picker-grid', 'selectSiteForModal');
@@ -2057,22 +2111,23 @@ function showSitePickerModal(peptideId, scheduledTime, dateStr) {
 
 async function confirmSitePickerLog() {
     closeModal('site-picker-modal');
-    var dInput = document.getElementById('site-picker-dose-input');
+    var dInput   = document.getElementById('site-picker-dose-input');
+    var dUnitSel = document.getElementById('site-picker-dose-unit');
     var overrideDose = dInput ? (parseFloat(dInput.value) || null) : null;
-    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite, sitePickerDate, overrideDose);
+    var overrideUnit = (dUnitSel && dUnitSel.value) ? dUnitSel.value : null;
+    await quickLogDose(sitePickerPeptideId, sitePickerTime, sitePickerSelectedSite, sitePickerDate, overrideDose, overrideUnit);
 }
 
-async function quickLogDose(peptideId, scheduledTime, site, dateStr, overrideDose) {
+async function quickLogDose(peptideId, scheduledTime, site, dateStr, overrideDose, overrideUnit) {
     var p = (appData.peptides || []).find(function(x) { return x.id === peptideId; });
     if (!p) return;
     var now      = new Date();
     // dateStr is set when logging a missed past dose from the calendar; defaults to today.
     var doseDate = dateStr || localDateStr(now);
     var timeStr  = scheduledTime || (String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
-    var du       = dispUnit(p);
-    var dAmt     = (overrideDose !== null && overrideDose !== undefined && overrideDose > 0)
-                   ? overrideDose
-                   : (dispAmt(p.dailyDose, p) || 0);
+    var hasOverride = (overrideDose !== null && overrideDose !== undefined && overrideDose > 0);
+    var du   = (hasOverride && overrideUnit) ? overrideUnit : dispUnit(p);
+    var dAmt = hasOverride ? overrideDose : (dispAmt(p.dailyDose, p) || 0);
     if (!dAmt) { alert('Set a dose amount for ' + p.name + ' before quick-logging.'); return; }
 
     // Snapshot pre-state so the logged-screen Undo can fully reverse this
@@ -2085,12 +2140,15 @@ async function quickLogDose(peptideId, scheduledTime, site, dateStr, overrideDos
     };
 
     if (p.reconstituted) {
-        var mcgAmt    = toMcg(dAmt, p);
+        // Convert the dose into the peptide's canonical vial-depletion unit
+        // (mcg for mg-vials, IU for IU-vials, mL for mL-vials), respecting
+        // whatever unit the user actually entered in the site-picker.
+        var depAmt    = doseToVialDepletion(dAmt, du, p);
         var remaining = (p.reconstituted.remainingUnits !== undefined)
             ? p.reconstituted.remainingUnits
             : (isIU(p) ? p.mgPerVial : p.mgPerVial * 1000);
-        p.reconstituted.remainingUnits = Math.max(0, remaining - mcgAmt);
-        if (remaining - mcgAmt <= 0) { p.reconstituted = null; p.vialsOnHand = Math.max(0, p.vialsOnHand - 1); }
+        p.reconstituted.remainingUnits = Math.max(0, remaining - depAmt);
+        if (remaining - depAmt <= 0) { p.reconstituted = null; p.vialsOnHand = Math.max(0, p.vialsOnHand - 1); }
         try { await dbPut('peptides', p); } catch(e) {}
     }
     var hasActive = (appData.cycles || []).some(function(c) { return c.peptideId === p.id && c.status === 'active'; });
