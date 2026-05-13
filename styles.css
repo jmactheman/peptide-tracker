@@ -1377,3 +1377,54 @@ details[open] > .adv-summary::after { transform: rotate(90deg); }
     margin-bottom: 2px;
 }
 .adv-field select { width: 100%; }
+
+/* ── HISTORY FEED ─────────────────────────────────────────── */
+#history { padding: 14px 16px 78px; }
+
+.hist-stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+.hist-stat-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:12px; text-align:center; }
+.hist-stat-val { font-size:1.55rem; font-weight:700; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; color:var(--text-primary); line-height:1.1; }
+.hist-stat-lbl { font-size:0.66rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:#6a6a72; margin-top:3px; }
+
+.hist-activity-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:14px 14px 10px; margin-bottom:14px; }
+.hist-activity-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+.hist-activity-title { font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-primary); }
+.hist-activity-range { font-size:0.7rem; color:#6a6a72; }
+.hist-bar-chart { display:flex; gap:4px; height:60px; align-items:flex-end; }
+.hist-bar-col { flex:1; display:flex; align-items:flex-end; height:100%; }
+.hist-bar { width:100%; border-radius:4px; min-height:4px; }
+.hist-bar-labels { display:flex; gap:4px; margin-top:4px; }
+.hist-bar-lbl { flex:1; font-size:0.6rem; text-align:center; font-variant-numeric:tabular-nums; color:#6a6a72; }
+.hist-bar-lbl.today { color:var(--accent); font-weight:700; }
+
+.hist-search-row { display:flex; gap:8px; margin:4px 0 8px; }
+.hist-search-wrap { flex:1; display:flex; align-items:center; gap:8px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:8px 10px; transition:border-color 120ms ease; }
+.hist-search-wrap:focus-within { border-color:#3a3a3c; }
+.hist-search-wrap input { flex:1; background:transparent; border:none; outline:none; font-size:0.85rem; color:var(--text-primary); font-family:inherit; padding:0; min-width:0; }
+.hist-search-wrap input::placeholder { color:#6a6a72; }
+.hist-export-btn { display:flex; align-items:center; gap:5px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:0.78rem; font-weight:600; color:var(--text-primary); cursor:pointer; font-family:inherit; white-space:nowrap; transition:border-color 120ms ease; }
+.hist-export-btn:hover { border-color:#3a3a3c; }
+
+.hist-feed-head { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#6a6a72; padding:12px 0 8px; }
+
+.hist-day-group { margin-bottom:14px; }
+.hist-day-label { font-size:0.72rem; font-weight:600; color:#6a6a72; padding:2px 0 6px; }
+.hist-day-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.hist-entry { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer; transition:background 80ms; }
+.hist-entry.last { border-bottom:none; }
+.hist-entry:active { background:rgba(255,255,255,0.04); }
+.hist-swatch { width:32px; height:32px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.hist-dot { width:10px; height:10px; border-radius:50%; display:block; }
+.hist-entry-body { flex:1; min-width:0; }
+.hist-entry-title { display:flex; align-items:baseline; gap:6px; min-width:0; }
+.hist-entry-name { font-size:0.88rem; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
+.hist-entry-dose { font-size:0.74rem; color:#9c9ca3; font-variant-numeric:tabular-nums; white-space:nowrap; flex-shrink:0; }
+.hist-entry-meta { font-size:0.72rem; color:#6a6a72; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+.hist-entry-time { font-size:0.78rem; font-weight:500; font-variant-numeric:tabular-nums; color:#9c9ca3; flex-shrink:0; }
+
+.hist-empty { text-align:center; padding:40px 16px; }
+.hist-empty-text { font-size:0.85rem; color:var(--text-secondary); margin-bottom:12px; }
+.hist-clear-btn { background:none; border:none; color:var(--accent); font-size:0.85rem; font-weight:600; cursor:pointer; font-family:inherit; padding:4px 8px; }
+
+.hist-load-more { display:block; width:100%; background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; padding:11px 14px; font-size:0.8rem; font-weight:600; color:var(--text-primary); cursor:pointer; font-family:inherit; text-align:center; margin-bottom:14px; box-sizing:border-box; }
+.hist-load-more:active { opacity:0.7; }

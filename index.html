@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 
@@ -277,21 +277,40 @@
 
     <!-- ── HISTORY ────────────────────────────────────────── -->
     <div id="history" class="tab-content">
-        <div class="card">
-            <h2>Injection History</h2>
-            <div class="export-bar">
-                <button class="btn-ghost btn-small" onclick="exportCSV()">⬇ Export CSV</button>
-                <input type="text" id="history-search" placeholder="Filter by peptide..." style="padding:6px 10px;font-size:0.85rem;width:200px;">
-            </div>
-            <div style="overflow-x:auto;">
-                <table class="log-table">
-                    <thead><tr><th>Date</th><th>Time</th><th>Peptide</th><th>Dose</th><th>Site</th><th>Notes</th><th></th></tr></thead>
-                    <tbody id="history-table">
-                        <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <!-- Stats row -->
+        <div class="hist-stats-row">
+            <div class="hist-stat-card"><div class="hist-stat-val" id="hist-stat-doses">0</div><div class="hist-stat-lbl">Doses</div></div>
+            <div class="hist-stat-card"><div class="hist-stat-val" id="hist-stat-streak">0</div><div class="hist-stat-lbl">Day Streak</div></div>
+            <div class="hist-stat-card"><div class="hist-stat-val" id="hist-stat-peptides">0</div><div class="hist-stat-lbl">Peptides</div></div>
         </div>
+        <!-- 14-day activity strip -->
+        <div class="hist-activity-card">
+            <div class="hist-activity-header">
+                <span class="hist-activity-title">Last 14 Days</span>
+                <span class="hist-activity-range" id="hist-activity-range"></span>
+            </div>
+            <div class="hist-bar-chart" id="hist-bar-chart"></div>
+            <div class="hist-bar-labels" id="hist-bar-labels"></div>
+        </div>
+        <!-- Search + export -->
+        <div class="hist-search-row">
+            <div class="hist-search-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6a6a72" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="history-search" placeholder="Filter by peptide, site, note…" autocomplete="off">
+            </div>
+            <button class="hist-export-btn" onclick="exportCSV()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
+            </button>
+        </div>
+        <!-- Feed -->
+        <div class="hist-feed-head">Recent</div>
+        <div id="hist-feed"></div>
+        <div id="hist-empty" class="hist-empty" style="display:none;">
+            <div class="hist-empty-text">No doses match "<span id="hist-empty-query"></span>"</div>
+            <button class="hist-clear-btn" onclick="document.getElementById('history-search').value='';renderHistory('');">Clear</button>
+        </div>
+        <button class="hist-load-more" id="hist-load-more" onclick="histLoadMore()" style="display:none;">Load earlier doses</button>
     </div>
 
     <!-- ── DASHBOARD ──────────────────────────────────────── -->
@@ -672,9 +691,9 @@
     </div>
 </div>
 
-<script src="data.js?v=14"></script>
-<script src="db.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="data.js?v=15"></script>
+<script src="db.js?v=15"></script>
+<script src="app.js?v=15"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

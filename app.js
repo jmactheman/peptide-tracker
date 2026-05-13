@@ -246,6 +246,7 @@ function switchTab(tabId) {
     if (tabId === 'cycles')    renderCycles();
     if (tabId === 'tracking')  renderLogDosePlate();
     if (tabId === 'settings')  renderProtocolTemplatesList();
+    if (tabId === 'history')   { historyVisibleDays = 14; renderHistory(); }
 }
 
 // Wire desktop top tabs
@@ -1775,27 +1776,167 @@ function selectSiteForModal(site) {
 }
 
 // ── HISTORY ───────────────────────────────────────────────────
+var historyVisibleDays = 14;
+
+function dateMinus(dateStr, days) {
+    var d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+}
+
+function hexToRgb(hex) {
+    if (!hex || hex[0] !== '#' || hex.length < 7) return null;
+    return parseInt(hex.slice(1,3),16) + ',' + parseInt(hex.slice(3,5),16) + ',' + parseInt(hex.slice(5,7),16);
+}
+
+function renderHistoryStats(allDoses) {
+    var today = localDateStr();
+    var win14 = dateMinus(today, 13);
+    var windowDoses = allDoses.filter(function(d) { return d.date >= win14 && d.date <= today; });
+    document.getElementById('hist-stat-doses').textContent = windowDoses.length;
+    var pepSet = {};
+    windowDoses.forEach(function(d) { pepSet[d.peptideId || d.peptideName] = true; });
+    document.getElementById('hist-stat-peptides').textContent = Object.keys(pepSet).length;
+    var daySet = {};
+    allDoses.forEach(function(d) { daySet[d.date] = true; });
+    var streak = 0, cur = today;
+    while (daySet[cur]) { streak++; cur = dateMinus(cur, 1); }
+    document.getElementById('hist-stat-streak').textContent = streak;
+}
+
+function renderHistoryStrip(allDoses) {
+    var today = localDateStr();
+    var days = [];
+    for (var i = 13; i >= 0; i--) days.push(dateMinus(today, i));
+
+    var startD = new Date(days[0] + 'T00:00:00');
+    var endD   = new Date(days[13] + 'T00:00:00');
+    document.getElementById('hist-activity-range').textContent =
+        startD.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' – ' +
+        endD.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+    var dayData = {};
+    days.forEach(function(d) { dayData[d] = { count:0, colors:[] }; });
+    allDoses.forEach(function(d) {
+        if (!dayData[d.date]) return;
+        dayData[d.date].count++;
+        var p   = (appData.peptides||[]).find(function(x) { return x.id === d.peptideId; });
+        var col = p ? getPeptideColor(p) : 'var(--accent)';
+        if (dayData[d.date].colors.indexOf(col) === -1) dayData[d.date].colors.push(col);
+    });
+
+    var maxCount = Math.max.apply(null, days.map(function(d) { return dayData[d].count; }).concat([1]));
+
+    document.getElementById('hist-bar-chart').innerHTML = days.map(function(date) {
+        var dd = dayData[date];
+        var h  = Math.max(4, Math.round((dd.count / maxCount) * 56));
+        var bg;
+        if (dd.count === 0) {
+            bg = 'background:#2c2c2e;opacity:0.5;';
+        } else if (dd.colors.length === 1) {
+            bg = 'background:' + dd.colors[0] + ';';
+        } else {
+            bg = 'background:linear-gradient(to top,' + dd.colors.join(',') + ');';
+        }
+        return '<div class="hist-bar-col"><div class="hist-bar" style="height:' + h + 'px;' + bg + '" title="' + dd.count + ' dose' + (dd.count!==1?'s':'') + '"></div></div>';
+    }).join('');
+
+    document.getElementById('hist-bar-labels').innerHTML = days.map(function(date) {
+        var isToday = date === today;
+        var label   = new Date(date + 'T00:00:00').getDate();
+        return '<div class="hist-bar-lbl' + (isToday ? ' today' : '') + '">' + label + '</div>';
+    }).join('');
+}
+
 function renderHistory(filter) {
-    filter = filter !== undefined ? filter : (document.getElementById('history-search').value || '');
-    var tbody = document.getElementById('history-table');
-    var doses = (appData.doses || []).slice().sort(function(a,b) { return b.date.localeCompare(a.date); });
-    if (filter) doses = doses.filter(function(d) { return d.peptideName.toLowerCase().indexOf(filter.toLowerCase()) > -1; });
-    if (!doses.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary);">No doses logged yet</td></tr>';
+    filter = filter !== undefined ? filter : (document.getElementById('history-search') ? document.getElementById('history-search').value : '');
+    var lc = filter.toLowerCase();
+
+    var allDoses = (appData.doses || []).slice().sort(function(a,b) {
+        var ka = b.date + (b.time||''); var kb = a.date + (a.time||'');
+        return ka.localeCompare(kb);
+    });
+
+    renderHistoryStats(allDoses);
+    renderHistoryStrip(allDoses);
+
+    var doses = lc ? allDoses.filter(function(d) {
+        return (d.peptideName||'').toLowerCase().indexOf(lc) > -1 ||
+               (d.site||'').toLowerCase().indexOf(lc) > -1 ||
+               (d.notes||'').toLowerCase().indexOf(lc) > -1;
+    }) : allDoses;
+
+    var today      = localDateStr();
+    var cutoff     = dateMinus(today, historyVisibleDays - 1);
+    var visible    = doses.filter(function(d) { return d.date >= cutoff; });
+    var hasMore    = doses.some(function(d)   { return d.date < cutoff; });
+
+    var feed     = document.getElementById('hist-feed');
+    var emptyEl  = document.getElementById('hist-empty');
+    var loadMore = document.getElementById('hist-load-more');
+
+    if (!doses.length && !filter) {
+        feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary);font-size:0.85rem;">No doses logged yet</div>';
+        emptyEl.style.display = 'none';
+        loadMore.style.display = 'none';
         return;
     }
-    tbody.innerHTML = doses.map(function(d) {
-        return '<tr><td>' + fmtDate(d.date) + '</td>' +
-               '<td>' + (d.time || '-') + '</td>' +
-               '<td>' + escapeHtml(d.peptideName) + '</td>' +
-               '<td>' + d.amount + ' ' + (d.unit || 'mcg') + '</td>' +
-               '<td>' + escapeHtml(d.site || '-') + '</td>' +
-               '<td style="font-size:0.8rem;color:var(--text-secondary);max-width:160px;">' + escapeHtml(d.notes || '') + '</td>' +
-               '<td style="white-space:nowrap;">' +
-               '<button class="btn-ghost btn-small" onclick="openEditDoseModal(\'' + d.id + '\')" title="Edit">✏️</button> ' +
-               '<button class="btn-danger btn-small" onclick="deleteDose(\'' + d.id + '\')" title="Delete">🗑️</button>' +
-               '</td></tr>';
+
+    if (!visible.length) {
+        feed.innerHTML = '';
+        emptyEl.style.display = 'block';
+        document.getElementById('hist-empty-query').textContent = filter;
+        loadMore.style.display = 'none';
+        return;
+    }
+
+    emptyEl.style.display = 'none';
+
+    var groups = {}, groupOrder = [];
+    visible.forEach(function(d) {
+        if (!groups[d.date]) { groups[d.date] = []; groupOrder.push(d.date); }
+        groups[d.date].push(d);
+    });
+    groupOrder.sort(function(a,b) { return b.localeCompare(a); });
+
+    feed.innerHTML = groupOrder.map(function(date) {
+        var entries = groups[date];
+        return '<div class="hist-day-group">' +
+            '<div class="hist-day-label">' + fmtDate(date) + '</div>' +
+            '<div class="hist-day-card">' +
+            entries.map(function(d, i) {
+                var p      = (appData.peptides||[]).find(function(x) { return x.id === d.peptideId; });
+                var color  = p ? getPeptideColor(p) : 'var(--accent)';
+                var rgb    = hexToRgb(color);
+                var swBg   = rgb ? 'rgba(' + rgb + ',0.13)' : 'rgba(220,38,38,0.13)';
+                var doseStr = escapeHtml(d.amount + ' ' + (d.unit || 'mcg'));
+                var metaHtml = escapeHtml(d.site || '');
+                if (d.notes) {
+                    if (metaHtml) metaHtml += ' · ';
+                    metaHtml += '<span style="color:#f59e0b">📝 ' + escapeHtml(d.notes) + '</span>';
+                }
+                var isLast = i === entries.length - 1;
+                return '<div class="hist-entry' + (isLast ? ' last' : '') + '" onclick="openEditDoseModal(\'' + d.id + '\')">' +
+                    '<div class="hist-swatch" style="background:' + swBg + '"><span class="hist-dot" style="background:' + color + '"></span></div>' +
+                    '<div class="hist-entry-body">' +
+                        '<div class="hist-entry-title">' +
+                            '<span class="hist-entry-name">' + escapeHtml(d.peptideName || 'Unknown') + '</span>' +
+                            '<span class="hist-entry-dose">' + doseStr + '</span>' +
+                        '</div>' +
+                        '<div class="hist-entry-meta">' + metaHtml + '</div>' +
+                    '</div>' +
+                    '<div class="hist-entry-time">' + escapeHtml(d.time || '--:--') + '</div>' +
+                '</div>';
+            }).join('') +
+            '</div></div>';
     }).join('');
+
+    loadMore.style.display = hasMore ? 'block' : 'none';
+}
+
+function histLoadMore() {
+    historyVisibleDays += 14;
+    renderHistory();
 }
 
 document.getElementById('history-search').addEventListener('input', function() { renderHistory(this.value); });
@@ -1812,11 +1953,20 @@ async function deleteDose(id) {
 
 function exportCSV() {
     if (!appData.doses || !appData.doses.length) { alert('No doses to export.'); return; }
+    var searchEl = document.getElementById('history-search');
+    var lc = searchEl ? searchEl.value.toLowerCase() : '';
     var rows = [['Date','Time','Peptide','Dose','Unit','Site','Notes']];
-    appData.doses.slice().sort(function(a,b) { return a.date.localeCompare(b.date); }).forEach(function(d) {
+    var doses = appData.doses.slice().sort(function(a,b) { return a.date.localeCompare(b.date); });
+    if (lc) doses = doses.filter(function(d) {
+        return (d.peptideName||'').toLowerCase().indexOf(lc) > -1 ||
+               (d.site||'').toLowerCase().indexOf(lc) > -1 ||
+               (d.notes||'').toLowerCase().indexOf(lc) > -1;
+    });
+    if (!doses.length) { alert('No matching doses to export.'); return; }
+    doses.forEach(function(d) {
         rows.push([d.date, d.time||'', d.peptideName, d.amount, d.unit||'mcg', d.site||'', (d.notes||'').replace(/,/g,' ')]);
     });
-    dlCSV(rows, 'peptide-log');
+    dlCSV(rows, 'pepbros-history');
 }
 
 function dlCSV(rows, name) {
