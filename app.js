@@ -658,7 +658,7 @@ function renderSupply() {
             if (acyc) {
                 var today0 = new Date(); today0.setHours(0,0,0,0);
                 var wkIn = ((today0 - new Date(acyc.startDate + 'T00:00:00')) / (7 * 86400000)).toFixed(1);
-                cycleStripe = '<div class="cycle-stripe" style="background:' + pColor + ';" onclick="openCycleModal(\'' + acyc.id + '\')">Week ' + wkIn + ' of ' + p.cycleDuration + ' — tap to manage ▸</div>';
+                cycleStripe = '<div class="cycle-stripe" style="background:' + pColor + ';" onclick="goToCycleDetail(\'' + acyc.id + '\')">Week ' + wkIn + ' of ' + p.cycleDuration + ' — tap to manage ▸</div>';
             } else {
                 cycleStripe = '<div class="cycle-stripe cycle-stripe-start" onclick="startCycleManual(\'' + p.id + '\')">▶ Start Cycle</div>';
             }
@@ -888,149 +888,540 @@ function getCycleDoses(cycleId) {
     });
 }
 
-var ganttWindowStart = null, GANTT_WEEKS = 26;
+// ── CYCLES REDESIGN (v31) ─────────────────────────────────────
 
-function renderCycles() {
-    renderGantt(appData.cycles || []);
-    renderCycleDetails(appData.cycles || []);
-}
-
-function renderGantt(cycles) {
-    var wrapper = document.getElementById('gantt-wrapper');
-    var rl      = document.getElementById('gantt-range-label');
-    if (!cycles.length) { wrapper.innerHTML = '<div class="empty-state"><p>No cycles yet.</p></div>'; rl.textContent = ''; return; }
-
-    if (!ganttWindowStart) {
-        var earliest = cycles.reduce(function(m,c) { return c.startDate < m ? c.startDate : m; }, cycles[0].startDate);
-        var d = new Date(earliest + 'T00:00:00'); d.setDate(d.getDate() - 14);
-        ganttWindowStart = d;
-    }
-
-    var we    = new Date(ganttWindowStart.getTime() + GANTT_WEEKS * 7 * 86400000);
-    var tm    = GANTT_WEEKS * 7 * 86400000;
+// ── Calculation helpers ───────────────────────────────────────
+function cycleWeekOf(c) {
+    var start = new Date(c.startDate + 'T00:00:00');
     var today = new Date(); today.setHours(0,0,0,0);
-    rl.textContent = fmtDateShort(ganttWindowStart) + ' — ' + fmtDateShort(we);
-
-    var mm = [], cur = new Date(ganttWindowStart.getFullYear(), ganttWindowStart.getMonth(), 1);
-    while (cur < we) {
-        var pct = ((cur - ganttWindowStart) / tm) * 100;
-        if (pct >= 0 && pct <= 100) mm.push({ label: cur.toLocaleDateString('en-US',{month:'short',year:'2-digit'}), pct: pct });
-        cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    var ref = c.endDate ? new Date(c.endDate + 'T00:00:00') : today;
+    return (ref - start) / (7 * 86400000);
+}
+function cyclePct(c) {
+    return Math.min(100, (cycleWeekOf(c) / (c.plannedDuration || 1)) * 100);
+}
+function cycleDaysLeft(c) {
+    var start = new Date(c.startDate + 'T00:00:00');
+    var end = new Date(start.getTime() + (c.plannedDuration || 0) * 7 * 86400000);
+    var today = new Date(); today.setHours(0,0,0,0);
+    return Math.max(0, Math.ceil((end - today) / 86400000));
+}
+function cycleEndDateStr(c) {
+    var start = new Date(c.startDate + 'T00:00:00');
+    var end = c.endDate ? new Date(c.endDate + 'T00:00:00') : new Date(start.getTime() + (c.plannedDuration||0)*7*86400000);
+    return end.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+function cycleStartDateStr(c) {
+    return new Date(c.startDate + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+function cycleVialsUsed(c, p) {
+    if (!p || !p.mgPerVial) return 0;
+    var doses = getCycleDoses(c.id);
+    var vc = isIU(p) ? p.mgPerVial : p.mgPerVial * 1000;
+    var total = doses.reduce(function(s, d) {
+        var amt = (d.unit === 'mg') ? d.amount * 1000 : d.amount;
+        return s + amt;
+    }, 0);
+    return total / vc;
+}
+function cycleDosesLeft(c, p) {
+    if (!p) return 0;
+    var dpw = p.dosesPerWeek || 0;
+    var vialsLeft = p.vialsOnHand || 0;
+    var vialsUsed = cycleVialsUsed(c, p);
+    var totalVials = vialsUsed + vialsLeft;
+    if (!totalVials || !dpw) return 0;
+    return Math.round(vialsLeft * ((c.plannedDuration||0) * dpw / totalVials));
+}
+function cycleSupplyDays(c, p) {
+    var dpw = p ? (p.dosesPerWeek || 0) : 0;
+    if (!dpw) return 9999;
+    return Math.round(cycleDosesLeft(c, p) * (7 / dpw));
+}
+function cycleDailyDoseStr(p) {
+    if (!p || !p.dailyDose) return '—';
+    return dispAmt(p.dailyDose, p) + ' ' + dispUnit(p);
+}
+function cycleScheduleDays(p) {
+    if (!p || !p.schedule || !p.schedule.mode) return null;
+    var s = p.schedule;
+    if (s.mode === 'daily') return [0,1,2,3,4,5,6];
+    if (s.mode === 'specificDays' && Array.isArray(s.days)) return s.days.slice().sort(function(a,b){return a-b;});
+    return null;
+}
+function cycleNextDoseLabel(p) {
+    var days = cycleScheduleDays(p);
+    if (!days || !days.length) return '—';
+    var dow = new Date().getDay();
+    for (var i = 0; i < 7; i++) {
+        if (days.indexOf((dow + i) % 7) > -1) {
+            if (i === 0) return 'Today';
+            if (i === 1) return 'Tomorrow';
+            var d = new Date(); d.setDate(d.getDate() + i);
+            return d.toLocaleDateString('en-US', { weekday: 'short' });
+        }
     }
-
-    var mh = mm.map(function(m) { return '<div class="gantt-month-label" style="left:' + m.pct.toFixed(1) + '%;">' + m.label + '</div>'; }).join('');
-    var gl = mm.map(function(m) { return '<div class="gantt-grid-line" style="left:' + m.pct.toFixed(1) + '%;"></div>'; }).join('');
-    var tp = ((today - ganttWindowStart) / tm) * 100;
-    var tl = (tp >= 0 && tp <= 100) ? '<div class="gantt-today-line" style="left:' + tp.toFixed(1) + '%;"></div>' : '';
-
-    var bp = {};
-    cycles.forEach(function(c) { if (!bp[c.peptideId]) bp[c.peptideId] = []; bp[c.peptideId].push(c); });
-
-    var rows = '';
-    Object.keys(bp).forEach(function(pid) {
-        var pcs   = bp[pid];
-        var pName = escapeHtml(pcs[0].peptideName);
-        var bars  = pcs.map(function(c) {
-            var sd  = new Date(c.startDate + 'T00:00:00');
-            var ed  = c.endDate ? new Date(c.endDate + 'T00:00:00')
-                    : c.plannedEndDate ? new Date(c.plannedEndDate + 'T00:00:00')
-                    : new Date(today.getTime() + 7 * 86400000);
-            var lp  = ((sd - ganttWindowStart) / tm) * 100;
-            var wp  = ((ed - sd) / tm) * 100;
-            if (lp > 100 || lp + wp < 0) return '';
-            var cl  = Math.max(0, lp);
-            var cw  = Math.min(100 - cl, wp - (cl - lp));
-            var cnt = getCycleDoses(c.id).length;
-            return '<div class="gantt-bar ' + (c.status === 'active' ? 'active' : 'completed') +
-                   '" style="left:' + cl.toFixed(1) + '%;width:' + Math.max(0.5, cw).toFixed(1) + '%;background:' + (c.color || 'var(--accent)') + ';"' +
-                   ' title="' + pName + ': ' + c.startDate + ' (' + cnt + ' doses)"' +
-                   ' onclick="openCycleModal(\'' + c.id + '\')">' +
-                   (c.status === 'active' ? '● ' : '') + cnt + ' doses</div>';
-        }).join('');
-        rows += '<div class="gantt-row"><div class="gantt-row-label"><strong>' + pName + '</strong><small>' + pcs.length + ' cycle' + (pcs.length > 1 ? 's' : '') + '</small></div>' +
-                '<div class="gantt-track">' + gl + tl + bars + '</div></div>';
-    });
-
-    wrapper.innerHTML = '<div class="gantt-header"><div class="gantt-label-col">Peptide</div><div class="gantt-months">' + mh + '</div></div>' + rows;
+    return '—';
+}
+function cycleLastDoseLabel(p) {
+    var days = cycleScheduleDays(p);
+    if (!days || !days.length) return '—';
+    var dow = new Date().getDay();
+    for (var i = 1; i <= 7; i++) {
+        if (days.indexOf((dow - i + 7) % 7) > -1) {
+            if (i === 1) return 'Yesterday';
+            var d = new Date(); d.setDate(d.getDate() - i);
+            return d.toLocaleDateString('en-US', { weekday: 'short' });
+        }
+    }
+    return '—';
+}
+function cycleThisWeekDots(p, color) {
+    var days = cycleScheduleDays(p);
+    if (!days || !days.length) return '<span style="color:#52525b;font-size:10px;">—</span>';
+    var dow = new Date().getDay();
+    var todayIdx = (dow + 6) % 7;
+    var idxs = days.map(function(d) { return (d + 6) % 7; }).sort(function(a,b){return a-b;});
+    return idxs.map(function(idx) {
+        var done  = idx < todayIdx;
+        var today = idx === todayIdx;
+        return '<div style="width:9px;height:9px;border-radius:5px;' +
+            'background:' + (done ? color : 'transparent') + ';' +
+            'border:1.5px solid ' + ((done || today) ? color : '#333') + ';' +
+            (today ? 'box-shadow:0 0 0 2px ' + color + '33;' : '') +
+            'flex-shrink:0;"></div>';
+    }).join('');
+}
+function buildCycleRing(pct, color, size, stroke, label) {
+    var r    = (size - stroke) / 2;
+    var circ = 2 * Math.PI * r;
+    var off  = circ * (1 - Math.min(100, pct) / 100);
+    var fs   = size >= 100 ? 22 : 16;
+    return '<div class="cyc-ring-wrap" style="width:' + size + 'px;height:' + size + 'px;">' +
+        '<svg width="' + size + '" height="' + size + '" class="cyc-ring-svg">' +
+            '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r.toFixed(1) + '" stroke="#333" stroke-width="' + stroke + '" fill="none"/>' +
+            '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r.toFixed(1) + '" stroke="' + color + '" stroke-width="' + stroke + '" fill="none"' +
+                ' stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" stroke-linecap="round"/>' +
+        '</svg>' +
+        '<div class="cyc-ring-center">' +
+            '<div class="cyc-mono" style="font-size:' + fs + 'px;font-weight:700;letter-spacing:-0.02em;">' + escapeHtml(label) + '</div>' +
+            '<div class="cyc-ring-sub">WK</div>' +
+        '</div>' +
+    '</div>';
 }
 
-function renderCycleDetails(cycles) {
-    var container = document.getElementById('cycle-details-list');
-    if (!cycles.length) { container.innerHTML = '<div class="empty-state"><p>No cycles yet.</p></div>'; return; }
+// ── Hero card ─────────────────────────────────────────────────
+function renderHeroCard(c, p) {
+    var color = c.color || 'var(--accent)';
+    var wk = cycleWeekOf(c);
+    var pct = cyclePct(c);
+    var dl = cycleDaysLeft(c);
+    var vialsLeft = p ? (p.vialsOnHand || 0) : 0;
+    var vialsUsed = cycleVialsUsed(c, p);
+    var totalVials = vialsUsed + vialsLeft;
+    var dosesLeft = cycleDosesLeft(c, p);
+    var supplyDays = cycleSupplyDays(c, p);
+    var runsOutShort = supplyDays < dl;
+    var pctSupply = totalVials > 0 ? (vialsLeft / totalVials) * 100 : 0;
+    var dpw = p ? (p.dosesPerWeek || 0) : 0;
+    var doseStr = cycleDailyDoseStr(p);
+    var ringLabel = (Math.floor(wk) + 1) + '/' + (c.plannedDuration || '?');
+    var ringHtml = buildCycleRing(pct, color, 72, 6, ringLabel);
+    var dlColor = dl < 14 ? '#f59e0b' : '#71717a';
 
-    var sorted = cycles.slice().sort(function(a,b) { return b.startDate.localeCompare(a.startDate); });
-    var html   = '';
-    sorted.forEach(function(c) {
-        var doses  = getCycleDoses(c.id);
-        var p      = appData.peptides.find(function(x) { return x.id === c.peptideId; });
-        var start  = new Date(c.startDate + 'T00:00:00');
-        var today  = new Date(); today.setHours(0,0,0,0);
-        var endD   = c.endDate ? new Date(c.endDate + 'T00:00:00') : today;
-        var elapsed= Math.ceil((endD - start) / 86400000);
-        var pct    = c.plannedDuration ? Math.min(100, (elapsed / (c.plannedDuration * 7)) * 100) : null;
-        var totalU = doses.reduce(function(s,d) {
-            return s + ((d.unit === 'mg') ? d.amount * 1000 : d.amount);
-        }, 0);
-        var du = p ? (isIU(p) ? 'IU' : 'mcg') : 'mcg';
-        var sColor = c.status === 'active' ? 'var(--success)' : 'var(--accent)';
-        var barColor = c.color || 'var(--success)';
+    var ticksHtml = '';
+    if (totalVials > 0) {
+        var totalVialsCeil = Math.ceil(totalVials);
+        for (var ti = 1; ti < totalVialsCeil; ti++) {
+            var tickPct = (ti / totalVials) * 100;
+            ticksHtml += '<div style="position:absolute;top:0;bottom:0;left:' + tickPct.toFixed(1) + '%;width:1px;background:rgba(0,0,0,0.55);"></div>';
+        }
+    }
 
-        var progHtml = pct !== null
-            ? '<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:4px;">Week ' + (elapsed/7).toFixed(1) + ' of ' + c.plannedDuration + ' (' + pct.toFixed(0) + '% complete)</div>' +
-              '<div class="cycle-progress-bar"><div class="cycle-progress-fill" style="width:' + pct + '%;background:' + barColor + ';"></div></div>'
-            : '<div style="font-size:0.82rem;color:var(--text-secondary);">Week ' + (elapsed/7).toFixed(1) + ' elapsed</div>';
+    var warnHtml = '';
+    if (runsOutShort) {
+        var shortDelta = Math.round(dl - supplyDays);
+        var vialsNeeded = Math.ceil(shortDelta * dpw / 7);
+        warnHtml = '<div class="cyc-supply-warn">' +
+            '<div class="cyc-warn-icon">!</div>' +
+            '<span style="flex:1;line-height:1.3;">Runs out ' + shortDelta + 'd before cycle ends' +
+                '<div style="font-size:10.5px;color:#f59e0b;font-weight:500;margin-top:1px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">Need ≥ ' + vialsNeeded + ' more vials</div>' +
+            '</span>' +
+        '</div>';
+    }
 
-        var vc        = p ? (isIU(p) ? p.mgPerVial : p.mgPerVial * 1000) : 1000;
-        var vialsUsed = p ? '<div class="cycle-stat"><div class="cycle-stat-value">' + (totalU / vc).toFixed(2) + '</div><div class="cycle-stat-label">Vials Used</div></div>' : '';
+    var gaugeColor = runsOutShort ? '#f59e0b' : color;
+    var captionColor = runsOutShort ? '#f59e0b' : '#a1a1aa';
+    var rightCaption = runsOutShort
+        ? (function() { var d = new Date(); d.setDate(d.getDate() + supplyDays); return 'runs out ' + d.toLocaleDateString('en-US', {month:'short',day:'numeric'}); }())
+        : 'covers cycle';
+    var rightCaptionColor = runsOutShort ? '#f59e0b' : '#52525b';
 
-        var projHtml = '';
-        if (p && c.status === 'active') {
-            var proj = calcPostCycleProjection(p, c);
-            if (proj) {
-                var rw = proj.postVials <= p.reorderThreshold ? ' — <span style="color:var(--warning);">⚠️ Reorder</span>' : '';
-                projHtml = '<div class="supply-projection">📊 Post-Cycle: ~' + proj.postVials + ' vials remaining' + rw +
-                           '<br><small style="color:var(--text-secondary);">' + proj.daysRemaining + ' days remaining</small></div>';
-            }
+    var nextLabel = cycleNextDoseLabel(p);
+    var nextColor = nextLabel === 'Today' ? color : '#ffffff';
+
+    return '<div class="cyc-hero-card" onclick="showCycleDetail(\'' + c.id + '\')">' +
+        '<div class="cyc-hero-stripe" style="background:' + color + ';"></div>' +
+        '<div class="cyc-hero-top">' +
+            ringHtml +
+            '<div style="flex:1;min-width:0;">' +
+                '<div style="font-size:16px;font-weight:700;letter-spacing:-0.01em;line-height:1.15;">' + escapeHtml(c.peptideName) + '</div>' +
+                '<div style="font-size:11.5px;color:#a1a1aa;margin-top:4px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.02em;">' + doseStr + ' · ' + dpw + '× / wk</div>' +
+                '<div style="font-size:11px;color:' + dlColor + ';margin-top:3px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">' + dl + 'd left · ends ' + cycleEndDateStr(c) + '</div>' +
+            '</div>' +
+            '<button class="cyc-chevron-btn" onclick="event.stopPropagation();showCycleDetail(\'' + c.id + '\')">›</button>' +
+        '</div>' +
+        '<div style="margin-top:14px;">' +
+            '<div class="cyc-gauge-track">' +
+                '<div class="cyc-gauge-fill" style="width:' + pctSupply.toFixed(1) + '%;background:' + gaugeColor + ';border-radius:5px;"></div>' +
+                ticksHtml +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;margin-top:5px;">' +
+                '<span style="font-size:10.5px;color:' + captionColor + ';font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;font-weight:600;">' + vialsLeft.toFixed(1) + ' vials · ' + dosesLeft + ' doses</span>' +
+                '<span style="font-size:10.5px;color:' + rightCaptionColor + ';font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">' + rightCaption + '</span>' +
+            '</div>' +
+        '</div>' +
+        '<div class="cyc-rhythm-grid">' +
+            '<div>' +
+                '<div class="cyc-micro-lbl">THIS WK</div>' +
+                '<div style="display:flex;gap:4px;margin-top:5px;align-items:center;height:14px;">' + cycleThisWeekDots(p, color) + '</div>' +
+            '</div>' +
+            '<div style="border-left:1px solid #262626;padding-left:12px;">' +
+                '<div class="cyc-micro-lbl">LAST</div>' +
+                '<div class="cyc-mono" style="font-size:13px;font-weight:700;color:#ffffff;margin-top:4px;letter-spacing:-0.01em;">' + cycleLastDoseLabel(p) + '</div>' +
+            '</div>' +
+            '<div style="border-left:1px solid #262626;padding-left:12px;">' +
+                '<div class="cyc-micro-lbl">NEXT</div>' +
+                '<div class="cyc-mono" style="font-size:13px;font-weight:700;color:' + nextColor + ';margin-top:4px;letter-spacing:-0.01em;">' + nextLabel + '</div>' +
+            '</div>' +
+        '</div>' +
+        warnHtml +
+    '</div>';
+}
+
+// ── Completed row ─────────────────────────────────────────────
+function renderCompletedRow(c) {
+    var color = c.color || 'var(--accent)';
+    var ms = new Date(c.startDate + 'T00:00:00');
+    var me = c.endDate ? new Date(c.endDate + 'T00:00:00') : new Date();
+    var weeks = Math.round((me - ms) / (7 * 86400000));
+    var doses = getCycleDoses(c.id);
+    var endStr = c.endDate ? new Date(c.endDate + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+    return '<div class="cyc-completed-row" onclick="showCycleDetail(\'' + c.id + '\')">' +
+        '<div style="width:8px;height:8px;border-radius:4px;background:' + color + ';opacity:0.7;flex-shrink:0;"></div>' +
+        '<div style="flex:1;min-width:0;">' +
+            '<div style="display:flex;align-items:baseline;gap:8px;">' +
+                '<div style="font-size:13.5px;font-weight:600;">' + escapeHtml(c.peptideName) + '</div>' +
+                '<div class="cyc-mono" style="font-size:10px;color:#52525b;letter-spacing:0.08em;">' + weeks + 'W</div>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:5px;">' +
+                '<div style="flex:1;height:2px;background:' + color + ';opacity:0.4;border-radius:1px;"></div>' +
+                '<div class="cyc-mono" style="font-size:10px;color:#71717a;letter-spacing:0.04em;">' + cycleStartDateStr(c) + ' → ' + endStr + '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#71717a;font-family:\'SF Mono\',ui-monospace,monospace;text-align:right;">' +
+            doses.length + '<span style="color:#52525b;font-size:9px;letter-spacing:0.1em;margin-left:3px;">DOSES</span>' +
+        '</div>' +
+    '</div>';
+}
+
+// ── Main render ───────────────────────────────────────────────
+function renderCycles() {
+    var feedEl   = document.getElementById('cycles-feed');
+    var detailEl = document.getElementById('cycles-detail');
+    if (!feedEl) return;
+    detailEl.style.display = 'none';
+    feedEl.style.display   = '';
+
+    var allCycles   = appData.cycles || [];
+    var active      = allCycles.filter(function(c) { return c.status === 'active'; });
+    var completed   = allCycles.filter(function(c) { return c.status === 'completed'; });
+
+    if (!allCycles.length || !active.length) {
+        var subtitleEmpty = completed.length > 0
+            ? 'No active cycles · ' + completed.length + ' completed'
+            : 'No active cycles';
+
+        var quickPillsHtml = '';
+        if (completed.length) {
+            var pills = completed.map(function(c) {
+                var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+                var doseStr = p ? cycleDailyDoseStr(p) : '—';
+                var dpw = p ? (p.dosesPerWeek || 0) : 0;
+                var color = c.color || 'var(--accent)';
+                return '<div class="cyc-quickstart-pill" onclick="startCycleManual(\'' + c.peptideId + '\')">' +
+                    '<div style="width:7px;height:7px;border-radius:4px;background:' + color + ';flex-shrink:0;"></div>' +
+                    '<div style="flex:1;">' +
+                        '<div style="font-size:12.5px;font-weight:600;">' + escapeHtml(c.peptideName) + '</div>' +
+                        '<div class="cyc-mono" style="font-size:10px;color:#71717a;margin-top:1px;">' + doseStr + ' · ' + dpw + '× / wk · ' + (c.plannedDuration||'?') + 'w</div>' +
+                    '</div>' +
+                    '<span style="font-size:11px;color:#52525b;">↻</span>' +
+                '</div>';
+            }).join('');
+            quickPillsHtml = '<div class="cyc-quickstart-section">' +
+                '<span class="cyc-quickstart-label">QUICK START FROM PAST</span>' +
+                '<div style="display:flex;flex-direction:column;gap:6px;">' + pills + '</div>' +
+                '</div>';
         }
 
-        var endBtn = c.status === 'active'
-            ? '<div style="margin-top:12px;"><button class="btn-danger btn-small" onclick="openCycleModal(\'' + c.id + '\')">End Cycle</button></div>'
-            : '';
+        var emptyHtml = '<div style="padding:8px 18px 0;">' +
+            '<div class="cyc-empty-card">' +
+                '<svg width="92" height="92" viewBox="0 0 92 92" class="cyc-ghost-ring">' +
+                    '<circle cx="46" cy="46" r="40" stroke="#333" stroke-width="5" fill="none" stroke-dasharray="6 7"/>' +
+                    '<text x="46" y="51" text-anchor="middle" font-family="\'SF Mono\',ui-monospace,monospace" font-size="14" font-weight="700" fill="#52525b" letter-spacing="-0.02em">0/0</text>' +
+                '</svg>' +
+                '<div style="font-size:17px;font-weight:700;letter-spacing:-0.01em;">No active cycles</div>' +
+                '<div style="font-size:12.5px;color:#71717a;margin-top:6px;line-height:1.4;max-width:240px;margin-left:auto;margin-right:auto;">Start a new cycle to track dosing, supply, and adherence over time.</div>' +
+                '<button class="cyc-start-btn" onclick="startCycleFromEmpty()">+ Start a cycle</button>' +
+                quickPillsHtml +
+            '</div>' +
+        '</div>';
 
-        html += '<div class="cycle-detail-card">' +
-            '<div class="cycle-detail-header">' +
-            '<div><strong style="font-size:1.05rem;">' + escapeHtml(c.peptideName) + '</strong>' +
-            '<span class="status-badge" style="background:rgba(255,255,255,0.07);color:' + sColor + ';margin-left:8px;">' + c.status.toUpperCase() + '</span></div>' +
-            '<div style="font-size:0.82rem;color:var(--text-secondary);">' + fmtDate(c.startDate) + ' → ' + (c.endDate ? fmtDate(c.endDate) : c.plannedEndDate ? fmtDate(c.plannedEndDate) + ' (planned)' : 'Ongoing') + '</div></div>' +
-            progHtml +
-            '<div class="cycle-stats">' +
-            '<div class="cycle-stat"><div class="cycle-stat-value">' + doses.length + '</div><div class="cycle-stat-label">Doses</div></div>' +
-            '<div class="cycle-stat"><div class="cycle-stat-value">' + elapsed + '</div><div class="cycle-stat-label">Days</div></div>' +
-            '<div class="cycle-stat"><div class="cycle-stat-value">' + totalU.toFixed(0) + '</div><div class="cycle-stat-label">Total ' + du + '</div></div>' +
-            vialsUsed + '</div>' + projHtml + endBtn + '</div>';
+        var completedHtml = '';
+        if (completed.length) {
+            completedHtml = '<div style="padding:22px 18px 0;display:flex;align-items:center;gap:10px;">' +
+                '<div style="font-size:11px;color:#71717a;letter-spacing:0.18em;text-transform:uppercase;font-weight:700;white-space:nowrap;">COMPLETED · ' + completed.length + '</div>' +
+                '<div class="cyc-section-line"></div>' +
+                '</div>' +
+                '<div class="cyc-completed-list">' +
+                completed.map(renderCompletedRow).join('') +
+                '</div>';
+        }
+
+        feedEl.innerHTML = '<div style="padding:14px 18px 6px;">' +
+            '<div style="font-size:28px;font-weight:700;letter-spacing:-0.025em;line-height:1.1;">Cycles</div>' +
+            '<div class="cyc-mono" style="margin-top:4px;font-size:12px;color:#71717a;letter-spacing:0.04em;">' + subtitleEmpty + '</div>' +
+            '</div>' +
+            emptyHtml + completedHtml;
+        return;
+    }
+
+    var sorted = active.slice().sort(function(a, b) {
+        var pa = appData.peptides.find(function(x) { return x.id === a.peptideId; });
+        var pb = appData.peptides.find(function(x) { return x.id === b.peptideId; });
+        var aCrit = cycleSupplyDays(a, pa) < cycleDaysLeft(a) ? 0 : 1;
+        var bCrit = cycleSupplyDays(b, pb) < cycleDaysLeft(b) ? 0 : 1;
+        return aCrit - bCrit;
     });
-    container.innerHTML = html;
+
+    var critCount = sorted.filter(function(c) {
+        var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+        return cycleSupplyDays(c, p) < cycleDaysLeft(c);
+    }).length;
+
+    var subtitle = active.length + ' active · ' +
+        (critCount > 0 ? critCount + ' need supply' : completed.length + ' completed');
+
+    var activeCards = sorted.map(function(c) {
+        var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+        return renderHeroCard(c, p);
+    }).join('');
+
+    var completedSect = '';
+    if (completed.length) {
+        completedSect = '<div style="padding:22px 18px 0;display:flex;align-items:center;gap:10px;">' +
+            '<div style="font-size:11px;color:#71717a;letter-spacing:0.18em;text-transform:uppercase;font-weight:700;white-space:nowrap;">COMPLETED · ' + completed.length + '</div>' +
+            '<div class="cyc-section-line"></div>' +
+            '</div>' +
+            '<div class="cyc-completed-list">' +
+            completed.map(renderCompletedRow).join('') +
+            '</div>';
+    }
+
+    feedEl.innerHTML =
+        '<div style="padding:14px 18px 6px;">' +
+            '<div style="font-size:28px;font-weight:700;letter-spacing:-0.025em;line-height:1.1;">Cycles</div>' +
+            '<div class="cyc-mono" style="margin-top:4px;font-size:12px;color:#71717a;letter-spacing:0.04em;">' + subtitle + '</div>' +
+        '</div>' +
+        '<div class="cyc-section-hdr">' +
+            '<div class="cyc-section-lbl-active">ACTIVE · ' + active.length + '</div>' +
+            '<div class="cyc-section-line"></div>' +
+        '</div>' +
+        '<div class="cyc-cards-list">' + activeCards + '</div>' +
+        completedSect;
 }
 
+// ── Detail view ───────────────────────────────────────────────
+function showCycleDetail(cycleId) {
+    var feedEl   = document.getElementById('cycles-feed');
+    var detailEl = document.getElementById('cycles-detail');
+    if (!feedEl || !detailEl) return;
+
+    var c = (appData.cycles || []).find(function(x) { return x.id === cycleId; });
+    if (!c) return;
+    var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+    var color = c.color || 'var(--accent)';
+    var wk = cycleWeekOf(c);
+    var pct = cyclePct(c);
+    var dl = cycleDaysLeft(c);
+    var dpw = p ? (p.dosesPerWeek || 0) : 0;
+    var doseStr = cycleDailyDoseStr(p);
+    var ringLabel = (Math.floor(wk) + 1) + '/' + (c.plannedDuration || '?');
+    var vialsLeft = p ? (p.vialsOnHand || 0) : 0;
+    var vialsUsed = cycleVialsUsed(c, p);
+    var totalVials = vialsUsed + vialsLeft;
+    var dosesLeft = cycleDosesLeft(c, p);
+    var supplyDays = cycleSupplyDays(c, p);
+    var runsOutShort = supplyDays < dl;
+
+    var scheduleDays = cycleScheduleDays(p);
+    var actualDoses = getCycleDoses(cycleId).length;
+    var adherence = 100;
+    if (scheduleDays && scheduleDays.length) {
+        var todayMonIdx = (new Date().getDay() + 6) % 7;
+        var scheduledIdxs = scheduleDays.map(function(d) { return (d + 6) % 7; }).sort(function(a,b){return a-b;});
+        var doneDots = scheduledIdxs.filter(function(idx) { return idx <= todayMonIdx; }).length;
+        var expectedDoses = Math.floor(cycleWeekOf(c)) * dpw + doneDots;
+        adherence = expectedDoses > 0 ? Math.min(100, Math.round(actualDoses / expectedDoses * 100)) : 100;
+    }
+
+    var largeRing = buildCycleRing(pct, color, 108, 8, ringLabel);
+
+    var supplyPct = totalVials > 0 ? (vialsLeft / totalVials) * 100 : 0;
+    var supplyTag = runsOutShort
+        ? (function() {
+            var d = new Date(); d.setDate(d.getDate() + supplyDays);
+            var ds = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}).toUpperCase();
+            return '<span style="font-size:10px;color:#f59e0b;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.08em;font-weight:700;">RUNS OUT ' + ds + '</span>';
+          }())
+        : '<span style="font-size:10px;color:#22c55e;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.08em;font-weight:700;">✓ COVERS CYCLE</span>';
+
+    var weekDayLabels = ['M','T','W','T','F','S','S'];
+    var dow = new Date().getDay();
+    var todayMonIdx2 = (dow + 6) % 7;
+    var weekCells = weekDayLabels.map(function(lbl, i) {
+        var jsDay = (i + 1) % 7;
+        var isScheduled = scheduleDays ? scheduleDays.indexOf(jsDay) > -1 : false;
+        var isPast  = i < todayMonIdx2;
+        var isToday = i === todayMonIdx2;
+        var cellBg = isToday ? color + '22' : '#1a1a1a';
+        var cellBorder = isToday ? '1px solid ' + color : '1px solid #262626';
+        var lblColor = isToday ? color : '#52525b';
+        var dotHtml;
+        if (isScheduled) {
+            var dotFill = (isPast || isToday) ? color : 'transparent';
+            var dotBorder = (isPast || isToday) ? color : '#333';
+            var dotGlyph = isPast ? '✓' : (isToday ? '!' : '');
+            dotHtml = '<div style="width:14px;height:14px;border-radius:7px;background:' + dotFill + ';border:1.5px solid ' + dotBorder + ';display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:800;">' + dotGlyph + '</div>';
+        } else {
+            dotHtml = '<div style="width:3px;height:3px;border-radius:2px;background:#52525b;"></div>';
+        }
+        return '<div style="background:' + cellBg + ';border:' + cellBorder + ';border-radius:8px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:56px;">' +
+            '<div style="font-size:10px;color:' + lblColor + ';font-family:\'SF Mono\',ui-monospace,monospace;font-weight:700;letter-spacing:0.04em;">' + lbl + '</div>' +
+            dotHtml +
+        '</div>';
+    }).join('');
+
+    var recentDoses = getCycleDoses(cycleId).slice().sort(function(a,b) {
+        return (b.date + (b.time||'')).localeCompare(a.date + (a.time||''));
+    }).slice(0, 5);
+
+    var recentHtml = recentDoses.map(function(d, i) {
+        var dateLabel = new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+        var metaParts = [];
+        if (d.amount) metaParts.push(d.amount + ' ' + (d.unit || ''));
+        if (d.site) metaParts.push(d.site);
+        if (d.time) metaParts.push(d.time);
+        var borderBot = i < recentDoses.length - 1 ? 'border-bottom:1px solid #262626;' : '';
+        return '<div style="padding:11px 14px;' + borderBot + 'display:flex;align-items:center;gap:12px;">' +
+            '<div style="width:6px;height:6px;border-radius:3px;background:' + color + ';opacity:0.7;flex-shrink:0;"></div>' +
+            '<div style="flex:1;min-width:0;">' +
+                '<div style="font-size:13px;font-weight:600;">' + dateLabel + '</div>' +
+                '<div style="font-size:11px;color:#71717a;margin-top:1px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.02em;">' + escapeHtml(metaParts.join(' · ')) + '</div>' +
+            '</div>' +
+            '<button style="width:22px;height:22px;border-radius:11px;background:transparent;border:1px solid #333;color:#52525b;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="openEditDoseModal(\'' + d.id + '\')">›</button>' +
+        '</div>';
+    }).join('');
+
+    var safeName = escapeHtml(c.peptideName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    var endCycleBtn = c.status === 'active'
+        ? '<div style="padding:14px 18px 0;"><button class="cyc-end-cycle-btn" onclick="if(confirm(\'End ' + safeName + ' cycle?\'))endCycle(\'' + c.id + '\')">End Cycle</button></div>'
+        : '';
+
+    feedEl.style.display   = 'none';
+    detailEl.style.display = '';
+    detailEl.innerHTML =
+        '<div class="cyc-detail-back" onclick="hideCycleDetail()">‹ Cycles</div>' +
+        '<div style="padding:0 18px 6px;">' +
+            '<div style="font-size:24px;font-weight:700;letter-spacing:-0.02em;">' + escapeHtml(c.peptideName) + '</div>' +
+            '<div class="cyc-mono" style="font-size:12px;color:#71717a;margin-top:3px;letter-spacing:0.04em;">' + doseStr + ' · ' + dpw + '× / wk · ' + dl + 'd left</div>' +
+        '</div>' +
+        '<div style="padding:0 18px;">' +
+            '<div class="cyc-detail-hero" style="position:relative;overflow:hidden;">' +
+                '<div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:' + color + ';"></div>' +
+                '<div style="display:flex;align-items:center;gap:16px;">' +
+                    largeRing +
+                    '<div style="flex:1;min-width:0;">' +
+                        '<div class="cyc-mono" style="font-size:11px;color:' + color + ';letter-spacing:0.14em;font-weight:700;">ACTIVE</div>' +
+                        '<div class="cyc-mono" style="font-size:26px;font-weight:700;margin-top:2px;letter-spacing:-0.03em;line-height:1;">' + adherence + '%</div>' +
+                        '<div class="cyc-mono" style="font-size:10px;color:#52525b;letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">ADHERENCE</div>' +
+                        '<div class="cyc-mono" style="font-size:11.5px;color:#71717a;margin-top:10px;letter-spacing:0.04em;">' + cycleStartDateStr(c) + ' → ' + cycleEndDateStr(c) + '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="padding:12px 18px 0;">' +
+            '<span class="cyc-section-lbl">SUPPLY</span>' +
+            '<div class="cyc-panel-card">' +
+                '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">' +
+                    '<div>' +
+                        '<span class="cyc-mono" style="font-size:22px;font-weight:700;letter-spacing:-0.02em;">' + vialsLeft.toFixed(1) + '</span>' +
+                        '<span class="cyc-mono" style="font-size:11px;color:#71717a;margin-left:6px;letter-spacing:0.04em;">vials · ' + dosesLeft + ' doses</span>' +
+                    '</div>' +
+                    supplyTag +
+                '</div>' +
+                '<div style="position:relative;height:10px;background:#1a1a1a;border:1px solid #262626;border-radius:5px;overflow:hidden;">' +
+                    '<div style="position:absolute;left:0;top:0;bottom:0;width:' + supplyPct.toFixed(1) + '%;background:' + color + ';"></div>' +
+                '</div>' +
+                '<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:#52525b;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.06em;">' +
+                    '<span>USED ' + vialsUsed.toFixed(1) + '</span>' +
+                    '<span>TOTAL ' + totalVials.toFixed(1) + '</span>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="padding:14px 18px 0;">' +
+            '<span class="cyc-section-lbl">THIS WEEK</span>' +
+            '<div class="cyc-panel-card">' +
+                '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">' + weekCells + '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div style="padding:14px 18px 0;">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+                '<span class="cyc-section-lbl" style="margin-bottom:0;">RECENT DOSES</span>' +
+                '<span class="cyc-mono" style="font-size:10px;color:#52525b;">' + actualDoses + ' total</span>' +
+            '</div>' +
+            '<div style="background:#141414;border:1px solid #262626;border-radius:14px;overflow:hidden;">' +
+                (recentHtml || '<div style="padding:16px;color:#52525b;font-size:13px;text-align:center;">No doses recorded yet</div>') +
+            '</div>' +
+        '</div>' +
+        endCycleBtn +
+        '<div style="height:24px;"></div>';
+}
+
+function hideCycleDetail() {
+    var feedEl   = document.getElementById('cycles-feed');
+    var detailEl = document.getElementById('cycles-detail');
+    if (feedEl)   feedEl.style.display   = '';
+    if (detailEl) detailEl.style.display = 'none';
+}
+
+function goToCycleDetail(cycleId) {
+    switchTab('cycles');
+    showCycleDetail(cycleId);
+}
+
+function startCycleFromEmpty() {
+    var active = (appData.cycles || []).filter(function(c) { return c.status === 'active'; });
+    var activePids = active.map(function(c) { return c.peptideId; });
+    var avail = (appData.peptides || []).find(function(p) { return activePids.indexOf(p.id) === -1; });
+    if (!avail) { alert('All peptides already have active cycles.'); return; }
+    startCycleManual(avail.id);
+}
+
+// openCycleModal: redirect to inline detail so endCycle closeModal('cycle-modal') stays safe
 function openCycleModal(cycleId) {
-    var cycle  = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
-    if (!cycle) return;
-    var endBtn = document.getElementById('cycle-end-btn');
-    document.getElementById('cycle-modal-content').innerHTML =
-        '<p><strong>' + escapeHtml(cycle.peptideName) + '</strong></p>' +
-        '<p style="color:var(--text-secondary);font-size:0.88rem;margin-top:6px;">Started: ' + fmtDate(cycle.startDate) +
-        '<br>Status: ' + cycle.status + '<br>Doses: ' + getCycleDoses(cycleId).length + '</p>';
-    endBtn.style.display = cycle.status === 'active' ? 'inline-block' : 'none';
-    endBtn.onclick = function() { if (confirm('End ' + cycle.peptideName + ' cycle?')) endCycle(cycleId); };
-    document.getElementById('cycle-modal').classList.add('active');
+    showCycleDetail(cycleId);
 }
-
-document.getElementById('gantt-scroll-left').addEventListener('click', function() {
-    if (ganttWindowStart) { ganttWindowStart = new Date(ganttWindowStart.getTime() - 28 * 86400000); renderGantt(appData.cycles || []); }
-});
-document.getElementById('gantt-scroll-right').addEventListener('click', function() {
-    if (ganttWindowStart) { ganttWindowStart = new Date(ganttWindowStart.getTime() + 28 * 86400000); renderGantt(appData.cycles || []); }
-});
 
 // ── DOSE LOG ──────────────────────────────────────────────────
 function updateDoseDropdown() {

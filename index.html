@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=15">
+    <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 
@@ -357,25 +357,8 @@
 
     <!-- ── CYCLES ─────────────────────────────────────────── -->
     <div id="cycles" class="tab-content">
-        <div class="card">
-            <h2>Cycle Timeline</h2>
-            <div class="cycle-controls">
-                <button class="btn-ghost btn-small" id="gantt-scroll-left">◀ Earlier</button>
-                <span id="gantt-range-label" style="font-size:0.85rem;color:var(--text-secondary);"></span>
-                <button class="btn-ghost btn-small" id="gantt-scroll-right">Later ▶</button>
-                <span style="flex:1;"></span>
-                <span style="font-size:0.78rem;color:var(--text-secondary);">
-                    <span style="display:inline-block;width:10px;height:10px;background:var(--success);border-radius:2px;margin-right:4px;"></span>Active&nbsp;
-                    <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;margin:0 4px 0 10px;"></span>Completed&nbsp;
-                    <span style="display:inline-block;width:2px;height:10px;background:var(--danger);margin:0 4px 0 10px;"></span>Today
-                </span>
-            </div>
-            <div class="gantt-container"><div class="gantt-wrapper" id="gantt-wrapper"></div></div>
-        </div>
-        <div class="card">
-            <h2>Cycle Details</h2>
-            <div id="cycle-details-list"><div class="empty-state"><p>No cycles started yet.</p></div></div>
-        </div>
+        <div id="cycles-feed"></div>
+        <div id="cycles-detail" style="display:none;"></div>
     </div>
 
     <!-- ── SETTINGS ───────────────────────────────────────── -->
@@ -691,9 +674,9 @@
     </div>
 </div>
 
-<script src="data.js?v=15"></script>
-<script src="db.js?v=15"></script>
-<script src="app.js?v=15"></script>
+<script src="data.js?v=16"></script>
+<script src="db.js?v=16"></script>
+<script src="app.js?v=16"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
