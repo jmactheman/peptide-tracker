@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=19">
+    <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
 
@@ -367,6 +367,11 @@
             <h2>⚙️ Settings</h2>
 
             <div class="settings-section">
+                <h3>Account &amp; Sync</h3>
+                <div id="account-box"><p class="auth-sub">Loading…</p></div>
+            </div>
+
+            <div class="settings-section">
                 <h3>Appearance</h3>
                 <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
                     <span style="color:var(--text-secondary);font-size:0.9rem;">Theme:</span>
@@ -676,9 +681,11 @@
     </div>
 </div>
 
-<script src="data.js?v=19"></script>
-<script src="db.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="data.js?v=20"></script>
+<script src="db.js?v=20"></script>
+<script src="app.js?v=20"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="auth.js?v=20"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
