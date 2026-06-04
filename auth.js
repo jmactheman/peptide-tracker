@@ -102,7 +102,10 @@ function renderAccountUI() {
         box.innerHTML =
             '<p class="auth-status">✅ Signed in as <strong>' + esc(email) + '</strong></p>' +
             '<p class="auth-sub" id="sync-status">Your data backs up to this account.</p>' +
-            '<button class="btn-ghost btn-small" onclick="signOutUser()">Sign out</button>';
+            '<div class="auth-row">' +
+                '<button class="btn-ghost btn-small" onclick="forceSync()">⟳ Back up now</button>' +
+                '<button class="btn-ghost btn-small" onclick="signOutUser()">Sign out</button>' +
+            '</div>';
     } else {
         box.innerHTML =
             '<p class="auth-sub">Sign in to back up your data and sync across devices. The app works without an account too.</p>' +
