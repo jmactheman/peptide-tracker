@@ -103,7 +103,7 @@ function renderAccountUI() {
             '<p class="auth-status">✅ Signed in as <strong>' + esc(email) + '</strong></p>' +
             '<p class="auth-sub" id="sync-status">Your data backs up to this account.</p>' +
             '<div class="auth-row">' +
-                '<button class="btn-ghost btn-small" onclick="forceSync()">⟳ Back up now</button>' +
+                '<button class="btn-ghost btn-small" onclick="forceSync()">⟳ Sync now</button>' +
                 '<button class="btn-ghost btn-small" onclick="signOutUser()">Sign out</button>' +
             '</div>';
     } else {

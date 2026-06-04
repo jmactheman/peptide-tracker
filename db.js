@@ -165,3 +165,15 @@ function dbClearPending(key) {
         });
     });
 }
+
+// Remove a tombstone (used by sync when the cloud resurrects a record).
+function dbClearTombstone(key) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction('_tombstones', 'readwrite');
+            var req = tx.objectStore('_tombstones').delete(key);
+            req.onsuccess = function() { resolve(); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
