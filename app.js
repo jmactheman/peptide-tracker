@@ -178,13 +178,31 @@ function applyTheme() {
 }
 
 // ── LOW STOCK BANNER ─────────────────────────────────────────
+// "Seen" low-stock peptide ids (per device) — the bell badge means NEW, not just
+// "stock is low." Opening the bell marks the current alerts seen.
+function getSeenLowStock() {
+    try { return JSON.parse(localStorage.getItem('pb_seen_lowstock') || '[]'); } catch (e) { return []; }
+}
+function setSeenLowStock(ids) {
+    try { localStorage.setItem('pb_seen_lowstock', JSON.stringify(ids)); } catch (e) {}
+}
+
 function checkLowStockNotification() {
     var low = appData.peptides.filter(function(p) {
         if ((p.trackingMode || 'simple') === 'simple') return false;
         return p.vialsOnHand <= (p.reorderThreshold || 5);
     });
+    var lowIds = low.map(function(p) { return p.id; });
+
+    // Prune the seen set to currently-low peptides, so a peptide that restocks
+    // and later drops low again counts as new and re-alerts.
+    var seen = getSeenLowStock().filter(function(id) { return lowIds.indexOf(id) > -1; });
+    setSeenLowStock(seen);
+
+    // Badge shows only when there's a low peptide the user hasn't seen yet.
+    var hasNew = lowIds.some(function(id) { return seen.indexOf(id) === -1; });
     var dot = document.getElementById('notif-dot');
-    if (dot) dot.classList.toggle('show', low.length > 0);
+    if (dot) dot.classList.toggle('show', hasNew);
     window._lowStockAlerts = low;
 }
 
@@ -203,6 +221,11 @@ function showNotifications() {
         }).join('');
     }
     document.getElementById('notif-modal').classList.add('active');
+
+    // Mark everything currently low as seen → badge goes quiet until something new drops.
+    setSeenLowStock(low.map(function(p) { return p.id; }));
+    var dot = document.getElementById('notif-dot');
+    if (dot) dot.classList.remove('show');
 }
 
 // ── COLOR PICKER ─────────────────────────────────────────────
