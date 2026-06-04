@@ -3065,40 +3065,7 @@ async function backupData() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-async function restoreData(event) {
-    var file = event.target.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = async function(e) {
-        try {
-            var backup = JSON.parse(e.target.result);
-            if (!backup.peptides && !backup.doses) { alert('Invalid backup file.'); return; }
-            if (!confirm('Restore this backup? All current data will be replaced.')) return;
-
-            for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
-
-            appData.peptides  = backup.peptides  || [];
-            appData.doses     = backup.doses     || [];
-            appData.cycles    = backup.cycles    || [];
-            appData.protocols = backup.protocols || [];
-            if (backup.settings) appData.settings = backup.settings;
-
-            for (var i = 0; i < appData.peptides.length;  i++) await dbPut('peptides',  appData.peptides[i]);
-            for (var i = 0; i < appData.doses.length;     i++) await dbPut('doses',     appData.doses[i]);
-            for (var i = 0; i < appData.cycles.length;    i++) await dbPut('cycles',    appData.cycles[i]);
-            for (var i = 0; i < appData.protocols.length; i++) await dbPut('protocols', appData.protocols[i]);
-            if (backup.settings) await dbPut('settings', Object.assign({ id:'app_settings' }, backup.settings));
-
-            applyTheme();
-            renderAll();
-            renderProtocolTemplatesList();
-            checkLowStockNotification();
-            alert('Data restored successfully!');
-        } catch(err) { alert('Restore failed: ' + err.message); }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-}
+// (Restore-replace removed — Import-from-file merge + cloud sync cover this safely.)
 
 // ── MERGE IMPORT ──────────────────────────────────────────────
 // Non-destructive: adds records from another device's backup without
@@ -3285,14 +3252,42 @@ async function mergeData(event) {
     event.target.value = '';
 }
 
-async function clearAllData() {
-    if (!confirm('Delete ALL data? This cannot be undone.')) return;
-    if (!confirm('Are you absolutely sure?')) return;
-    for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
-    appData = { peptides:[], doses:[], cycles:[], protocols:[], settings:{ theme:'dark' } };
+// Remove all data from THIS device and sign out. Cloud account is untouched.
+async function signOutAndClearDevice() {
+    if (!confirm('Sign out and remove all data from THIS device?\n\nYour cloud account is not affected — sign back in to restore it.')) return;
+    try {
+        for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
+        await dbClear('_tombstones');
+        await dbClear('_pending');
+        try { localStorage.removeItem('pb_owner_uid'); localStorage.removeItem('pb_seen_lowstock'); } catch (e) {}
+    } catch (e) { alert('Clear failed: ' + (e && e.message ? e.message : e)); return; }
+    appData = { peptides:[], doses:[], cycles:[], protocols:[], settings: appData.settings || { theme:'dark' } };
+    if (typeof signOutUser === 'function') { try { await signOutUser(); } catch (e) {} }
     renderAll();
+    renderProtocolTemplatesList();
     checkLowStockNotification();
-    alert('All data cleared.');
+    alert('This device has been cleared and signed out.');
+}
+
+// Permanently delete the user's data from the cloud AND this device.
+async function deleteAllMyData() {
+    var signedIn = (typeof authReady === 'function' && authReady() &&
+                    typeof currentUser === 'function' && currentUser());
+    if (!signedIn) return signOutAndClearDevice();  // not signed in → just clear this device
+    if (!confirm('Permanently delete ALL your data from the cloud AND every device?\n\nThis cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure? This erases everything in your account.')) return;
+    try {
+        if (typeof deleteAccountData === 'function') await deleteAccountData();   // wipe cloud
+        for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);          // wipe local
+        await dbClear('_tombstones');
+        await dbClear('_pending');
+        try { localStorage.removeItem('pb_seen_lowstock'); } catch (e) {}
+    } catch (e) { alert('Delete failed: ' + (e && e.message ? e.message : e)); return; }
+    appData = { peptides:[], doses:[], cycles:[], protocols:[], settings: appData.settings || { theme:'dark' } };
+    renderAll();
+    renderProtocolTemplatesList();
+    checkLowStockNotification();
+    alert('All your data has been deleted.');
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────

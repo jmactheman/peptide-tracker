@@ -239,6 +239,17 @@ function forceSync() {
     fullSync();
 }
 
+// Permanently delete every cloud row owned by the signed-in user (RLS scopes
+// the delete to their own rows). Used by "Delete all my data".
+async function deleteAccountData() {
+    var uid = await resolveUid();
+    if (!uid) throw new Error('Not signed in');
+    for (var i = 0; i < STORES.length; i++) {
+        var res = await sb.from(STORES[i]).delete().eq('user_id', uid);
+        if (res.error) throw res.error;
+    }
+}
+
 // db.js calls this after any local data write/delete.
 function onLocalChange() {
     if (!syncEnabled()) return;

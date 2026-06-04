@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=26">
+    <link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body>
 
@@ -390,17 +390,28 @@
             </div>
 
             <div class="settings-section">
-                <h3>Data Backup &amp; Restore</h3>
-                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export all your data as a JSON file for safekeeping, or load a previous backup.</p>
+                <h3>Your Data</h3>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export a copy for safekeeping. When you're signed in, your devices already sync automatically.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button class="btn-ghost btn-small" onclick="backupData()">⬇ Backup Data</button>
-                    <button class="btn-ghost btn-small" onclick="document.getElementById('merge-file').click()">⬆ Merge from Backup</button>
-                    <input type="file" id="merge-file" accept=".json" style="display:none;" onchange="mergeData(event)">
-                    <button class="btn-ghost btn-small" onclick="document.getElementById('restore-file').click()">↺ Restore (replace)</button>
-                    <input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreData(event)">
-                    <button class="btn-danger btn-small" onclick="clearAllData()">🗑️ Clear All Data</button>
+                    <button class="btn-ghost btn-small" onclick="backupData()">⬇ Export a copy</button>
                 </div>
-                <div class="tip-box" style="margin-top:12px;"><strong>Merge from Backup</strong> adds records from another device (e.g. your old computer) without deleting what's here, skipping duplicates. <strong>Restore (replace)</strong> wipes everything first, then loads the file. Tip: tap Backup Data before either, just in case.</div>
+
+                <details style="margin-top:14px;">
+                    <summary class="adv-summary">Advanced</summary>
+                    <div style="margin-top:10px;">
+                        <button class="btn-ghost btn-small" onclick="document.getElementById('merge-file').click()">⬆ Import from a file</button>
+                        <input type="file" id="merge-file" accept=".json" style="display:none;" onchange="mergeData(event)">
+                        <div class="tip-box" style="margin-top:10px;">Merges records from a JSON backup (e.g. an old device or another app), skipping duplicates. You don't normally need this — signed-in devices sync on their own.</div>
+                    </div>
+                </details>
+
+                <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px;">
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn-ghost btn-small" onclick="signOutAndClearDevice()">Sign out &amp; clear this device</button>
+                        <button class="btn-danger btn-small" onclick="deleteAllMyData()">Delete all my data</button>
+                    </div>
+                    <div class="tip-box" style="margin-top:10px;"><strong>Sign out &amp; clear this device</strong> removes data from this device only — your cloud account is untouched, and signing back in restores it. <strong>Delete all my data</strong> permanently erases everything, in the cloud and on every device.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -713,12 +724,12 @@
     </div>
 </div>
 
-<script src="data.js?v=26"></script>
-<script src="db.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="data.js?v=27"></script>
+<script src="db.js?v=27"></script>
+<script src="app.js?v=27"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=26"></script>
-<script src="sync.js?v=26"></script>
+<script src="auth.js?v=27"></script>
+<script src="sync.js?v=27"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
