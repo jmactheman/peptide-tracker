@@ -3137,7 +3137,7 @@ async function mergeData(event) {
                 inCycles.length + ' cycles, ' + inProto.length + ' protocols.\n\n' +
                 'Nothing will be deleted — duplicates are skipped.')) return;
 
-            // ── Peptides: match existing by id, else by name (re-point doses) ──
+            // ── Peptides: match existing by id, else by name (no duplicates) ──
             var existingPepById   = {};
             var existingPepByName = {};
             (appData.peptides || []).forEach(function(p) {
@@ -3145,21 +3145,14 @@ async function mergeData(event) {
                 existingPepByName[(p.name || '').toLowerCase().trim()] = p;
             });
 
-            var idRemap = {};   // oldPeptideId -> phonePeptideId
             var addedPeps = 0;
             for (var i = 0; i < inPeps.length; i++) {
                 var ip = inPeps[i];
                 if (!ip || !ip.id) continue;
                 var nameKey = (ip.name || '').toLowerCase().trim();
-                if (existingPepById[ip.id]) {
-                    // same id already here — keep ours
-                    continue;
-                }
-                if (nameKey && existingPepByName[nameKey]) {
-                    // same peptide by name — re-point its doses, don't duplicate
-                    idRemap[ip.id] = existingPepByName[nameKey].id;
-                    continue;
-                }
+                // already here by id or by name — keep ours, don't duplicate
+                if (existingPepById[ip.id]) continue;
+                if (nameKey && existingPepByName[nameKey]) continue;
                 // genuinely new peptide — add with safe defaults for newer fields
                 if (ip.vialsOnHand   === undefined) ip.vialsOnHand   = 0;
                 if (ip.dosesPerWeek  === undefined) ip.dosesPerWeek  = 7;
@@ -3171,40 +3164,65 @@ async function mergeData(event) {
                 addedPeps++;
             }
 
-            // Build a name lookup for filling missing dose peptideNames
-            var pepNameById = {};
-            (appData.peptides || []).forEach(function(p) { pepNameById[p.id] = p.name; });
-            inPeps.forEach(function(p) { if (p && p.id && !pepNameById[p.id]) pepNameById[p.id] = p.name; });
+            // Resolve every dose/cycle to a CURRENT peptide by name. This fixes
+            // orphaned peptideIds in old exports (the record's name is correct even
+            // when its id points at a peptide that was later deleted/recreated) and
+            // re-points name-matched peptides to the device's existing peptide id.
+            var nameToResolvedId = {};
+            (appData.peptides || []).forEach(function(p) {
+                var nk = (p.name || '').toLowerCase().trim();
+                if (nk && !nameToResolvedId[nk]) nameToResolvedId[nk] = p.id;
+            });
 
-            // ── Doses: dedupe by composite key ──
+            // ── Doses: dedupe by id, then by composite key vs existing device doses.
+            // Distinct records that share a composite key (e.g. two same-time logs of
+            // a blend) keep BOTH — only true re-imports (same id) and doses already on
+            // this device (same fingerprint, different id) are skipped. ──
+            var existingDoseIds  = {};
             var existingDoseKeys = {};
-            (appData.doses || []).forEach(function(d) { existingDoseKeys[doseKey(d)] = true; });
+            (appData.doses || []).forEach(function(d) {
+                existingDoseIds[d.id]      = true;
+                existingDoseKeys[doseKey(d)] = true;
+            });
 
-            var addedDoses = 0, skippedDoses = 0;
+            var addedDoses = 0, skippedDoses = 0, repointedDoses = 0;
             for (var j = 0; j < inDoses.length; j++) {
                 var nd = normalizeDose(inDoses[j]);
                 if (!nd) { skippedDoses++; continue; }
-                // re-point peptideId if it mapped to an existing phone peptide
-                if (nd.peptideId && idRemap[nd.peptideId]) nd.peptideId = idRemap[nd.peptideId];
-                // backfill peptideName from id if missing
-                if (!nd.peptideName && nd.peptideId && pepNameById[nd.peptideId]) nd.peptideName = pepNameById[nd.peptideId];
-                var k = doseKey(nd);
-                if (existingDoseKeys[k]) { skippedDoses++; continue; }
-                existingDoseKeys[k] = true;
+                var nk2 = (nd.peptideName || '').toLowerCase().trim();
+                if (nk2 && nameToResolvedId[nk2] && nd.peptideId !== nameToResolvedId[nk2]) {
+                    nd.peptideId = nameToResolvedId[nk2];
+                    repointedDoses++;
+                }
+                if (existingDoseIds[nd.id])        { skippedDoses++; continue; } // already imported
+                if (existingDoseKeys[doseKey(nd)]) { skippedDoses++; continue; } // already on this device
+                existingDoseIds[nd.id] = true; // guard against a repeated id within the file
                 appData.doses.push(nd);
                 await dbPut('doses', nd);
                 addedDoses++;
             }
 
-            // ── Cycles & protocols: dedupe by id ──
+            // ── Cycles: re-point by name, dedupe by id, and avoid creating a second
+            // ACTIVE cycle for a peptide that already has one (old exports often hold
+            // several overlapping active cycles per peptide). ──
             if (!appData.cycles) appData.cycles = [];
-            var addedCycles = 0;
             var existingCycleIds = {};
-            (appData.cycles || []).forEach(function(c) { existingCycleIds[c.id] = true; });
+            var activeByPeptide  = {};
+            appData.cycles.forEach(function(c) {
+                existingCycleIds[c.id] = true;
+                if (c.status === 'active') activeByPeptide[c.peptideId] = true;
+            });
+            var addedCycles = 0, skippedCycles = 0;
             for (var k2 = 0; k2 < inCycles.length; k2++) {
                 var ic = inCycles[k2];
-                if (!ic || !ic.id || existingCycleIds[ic.id]) continue;
-                if (ic.peptideId && idRemap[ic.peptideId]) ic.peptideId = idRemap[ic.peptideId];
+                if (!ic || !ic.id) continue;
+                var cnk = (ic.peptideName || '').toLowerCase().trim();
+                if (cnk && nameToResolvedId[cnk]) ic.peptideId = nameToResolvedId[cnk];
+                if (existingCycleIds[ic.id]) { skippedCycles++; continue; }
+                if (ic.status === 'active') {
+                    if (activeByPeptide[ic.peptideId]) { skippedCycles++; continue; }
+                    activeByPeptide[ic.peptideId] = true;
+                }
                 appData.cycles.push(ic);
                 existingCycleIds[ic.id] = true;
                 await dbPut('cycles', ic);
@@ -3228,10 +3246,14 @@ async function mergeData(event) {
             renderProtocolTemplatesList();
             checkLowStockNotification();
 
-            alert('Merge complete!\n\n' +
+            var msg = 'Merge complete!\n\n' +
                 'Added: ' + addedDoses + ' doses, ' + addedPeps + ' peptides, ' +
                 addedCycles + ' cycles, ' + addedProto + ' protocols.\n' +
-                'Skipped ' + skippedDoses + ' duplicate/invalid doses.');
+                'Skipped ' + skippedDoses + ' duplicate doses';
+            if (skippedCycles) msg += ' and ' + skippedCycles + ' duplicate/overlapping cycles';
+            msg += '.';
+            if (repointedDoses) msg += '\nRe-linked ' + repointedDoses + ' doses to the matching peptide.';
+            alert(msg);
         } catch(err) {
             alert('Merge failed: ' + err.message);
         }
