@@ -1,10 +1,19 @@
 'use strict';
 
 var DB_NAME    = 'PeptideTrackerDB';
-var DB_VERSION = 2;
+var DB_VERSION = 3;
+// Data stores that hold user records and participate in cloud sync.
 var STORES     = ['peptides','doses','cycles','protocols','settings'];
+// Local-only bookkeeping stores (never synced as data; they DRIVE sync).
+//   _tombstones : soft-delete markers so deletions propagate to the cloud
+//   _pending    : records changed locally since the last successful push
+var META_STORES = ['_tombstones','_pending'];
 
 var idb = null;
+
+function nowISO()            { return new Date().toISOString(); }
+function syncKey(store, id)  { return store + ':' + id; }
+function isDataStore(store)  { return STORES.indexOf(store) > -1; }
 
 function openDB() {
     return new Promise(function(resolve, reject) {
@@ -16,7 +25,7 @@ function openDB() {
             var old = e.oldVersion;
 
             if (old < 1) {
-                // Fresh install — create all active stores
+                // Fresh install — create all active data stores
                 STORES.forEach(function(s) {
                     if (!db.objectStoreNames.contains(s)) {
                         db.createObjectStore(s, { keyPath: 'id' });
@@ -29,6 +38,15 @@ function openDB() {
                 ['orders','templates'].forEach(function(s) {
                     if (db.objectStoreNames.contains(s)) {
                         db.deleteObjectStore(s);
+                    }
+                });
+            }
+
+            if (old < 3) {
+                // Add sync bookkeeping stores (additive — existing data untouched)
+                META_STORES.forEach(function(s) {
+                    if (!db.objectStoreNames.contains(s)) {
+                        db.createObjectStore(s, { keyPath: 'key' });
                     }
                 });
             }
@@ -50,24 +68,55 @@ function dbGetAll(store) {
     });
 }
 
-function dbPut(store, obj) {
+// Put a record. For data stores this also stamps `updatedAt`, queues the record
+// for push (_pending), and clears any stale tombstone for the same id — all in
+// one atomic transaction. Pass { raw: true } to write exactly as given without
+// stamping or dirtying (used by the sync layer when applying remote changes).
+function dbPut(store, obj, opts) {
+    opts = opts || {};
     return openDB().then(function(db) {
         return new Promise(function(resolve, reject) {
-            var tx  = db.transaction(store, 'readwrite');
-            var req = tx.objectStore(store).put(obj);
-            req.onsuccess = function() { resolve(); };
-            req.onerror   = function() { reject(req.error); };
+            var doSync = !opts.raw && isDataStore(store);
+            if (doSync) obj.updatedAt = nowISO();
+            var names = doSync ? [store, '_pending', '_tombstones'] : [store];
+            var tx = db.transaction(names, 'readwrite');
+            tx.objectStore(store).put(obj);
+            if (doSync) {
+                var k = syncKey(store, obj.id);
+                tx.objectStore('_pending').put({ key: k, store: store, id: obj.id, op: 'put' });
+                tx.objectStore('_tombstones').delete(k); // un-delete on resurrection
+            }
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror    = function() { reject(tx.error); };
+            tx.onabort    = function() { reject(tx.error); };
         });
     });
 }
 
-function dbDelete(store, id) {
+// Delete a record. For data stores this removes the row AND records a tombstone
+// + a pending delete so the removal syncs to the cloud. Pass { raw: true } to
+// hard-delete locally without leaving a tombstone (used by the sync layer when
+// applying a remote deletion that already happened elsewhere).
+function dbDelete(store, id, opts) {
+    opts = opts || {};
     return openDB().then(function(db) {
         return new Promise(function(resolve, reject) {
-            var tx  = db.transaction(store, 'readwrite');
-            var req = tx.objectStore(store).delete(id);
-            req.onsuccess = function() { resolve(); };
-            req.onerror   = function() { reject(req.error); };
+            var k = syncKey(store, id);
+            if (opts.raw || !isDataStore(store)) {
+                var tx0 = db.transaction([store], 'readwrite');
+                tx0.objectStore(store).delete(id);
+                tx0.oncomplete = function() { resolve(); };
+                tx0.onerror    = function() { reject(tx0.error); };
+                tx0.onabort    = function() { reject(tx0.error); };
+                return;
+            }
+            var tx = db.transaction([store, '_tombstones', '_pending'], 'readwrite');
+            tx.objectStore(store).delete(id);
+            tx.objectStore('_tombstones').put({ key: k, store: store, id: id, updatedAt: nowISO() });
+            tx.objectStore('_pending').put({ key: k, store: store, id: id, op: 'delete' });
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror    = function() { reject(tx.error); };
+            tx.onabort    = function() { reject(tx.error); };
         });
     });
 }
@@ -89,6 +138,23 @@ function dbGet(store, id) {
             var tx  = db.transaction(store, 'readonly');
             var req = tx.objectStore(store).get(id);
             req.onsuccess = function() { resolve(req.result || null); };
+            req.onerror   = function() { reject(req.error); };
+        });
+    });
+}
+
+// ── Sync helpers (used by the cloud sync layer in later increments) ──────────
+// Records changed locally since last push: [{ key, store, id, op }]
+function dbGetPending()    { return dbGetAll('_pending'); }
+// Soft-delete markers: [{ key, store, id, updatedAt }]
+function dbGetTombstones() { return dbGetAll('_tombstones'); }
+// Clear one pending marker once its change has been pushed.
+function dbClearPending(key) {
+    return openDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx  = db.transaction('_pending', 'readwrite');
+            var req = tx.objectStore('_pending').delete(key);
+            req.onsuccess = function() { resolve(); };
             req.onerror   = function() { reject(req.error); };
         });
     });
