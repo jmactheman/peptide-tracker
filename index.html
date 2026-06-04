@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=16">
+    <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -383,14 +383,16 @@
 
             <div class="settings-section">
                 <h3>Data Backup &amp; Restore</h3>
-                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export all your data as a JSON file for safekeeping, or restore from a previous backup.</p>
+                <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;">Export all your data as a JSON file for safekeeping, or load a previous backup.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="btn-ghost btn-small" onclick="backupData()">⬇ Backup Data</button>
-                    <button class="btn-ghost btn-small" onclick="document.getElementById('restore-file').click()">⬆ Restore Data</button>
+                    <button class="btn-ghost btn-small" onclick="document.getElementById('merge-file').click()">⬆ Merge from Backup</button>
+                    <input type="file" id="merge-file" accept=".json" style="display:none;" onchange="mergeData(event)">
+                    <button class="btn-ghost btn-small" onclick="document.getElementById('restore-file').click()">↺ Restore (replace)</button>
                     <input type="file" id="restore-file" accept=".json" style="display:none;" onchange="restoreData(event)">
                     <button class="btn-danger btn-small" onclick="clearAllData()">🗑️ Clear All Data</button>
                 </div>
-                <div class="tip-box" style="margin-top:12px;">Data is stored locally in your browser. Regular backups protect against data loss.</div>
+                <div class="tip-box" style="margin-top:12px;"><strong>Merge from Backup</strong> adds records from another device (e.g. your old computer) without deleting what's here, skipping duplicates. <strong>Restore (replace)</strong> wipes everything first, then loads the file. Tip: tap Backup Data before either, just in case.</div>
             </div>
         </div>
     </div>
@@ -674,9 +676,9 @@
     </div>
 </div>
 
-<script src="data.js?v=16"></script>
-<script src="db.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="data.js?v=17"></script>
+<script src="db.js?v=17"></script>
+<script src="app.js?v=17"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

@@ -3077,6 +3077,169 @@ async function restoreData(event) {
     event.target.value = '';
 }
 
+// ── MERGE IMPORT ──────────────────────────────────────────────
+// Non-destructive: adds records from another device's backup without
+// deleting anything already here. Idempotent — re-importing the same
+// file skips duplicates. Handles pre-refactor field-name drift.
+
+// Normalize a dose record (old or new schema) to the canonical shape.
+function normalizeDose(d) {
+    if (!d || typeof d !== 'object') return null;
+    var date = d.date || d.day || (d.dateTime ? String(d.dateTime).slice(0,10) : '') ||
+               (d.timestamp ? localDateStr(new Date(d.timestamp)) : '') ||
+               (d.loggedAt ? String(d.loggedAt).slice(0,10) : '');
+    if (!date) return null;
+    var time = d.time || (d.dateTime ? String(d.dateTime).slice(11,16) : '') || '';
+    var amount = (d.amount !== undefined) ? d.amount
+               : (d.dose   !== undefined) ? d.dose
+               : (d.amt    !== undefined) ? d.amt : null;
+    return {
+        id:          d.id || genId(),
+        peptideId:   d.peptideId || d.peptide_id || d.pid || null,
+        peptideName: d.peptideName || d.peptide || d.name || '',
+        date:        date,
+        time:        time,
+        amount:      amount,
+        unit:        d.unit || d.units || 'mcg',
+        site:        d.site || d.location || null,
+        notes:       d.notes || d.note || null,
+        loggedAt:    d.loggedAt || d.createdAt || (date + 'T' + (time || '00:00') + ':00')
+    };
+}
+
+function doseKey(d) {
+    return [
+        d.date,
+        d.time || '',
+        (d.peptideName || '').toLowerCase().trim(),
+        d.amount,
+        (d.site || '').toLowerCase().trim()
+    ].join('|');
+}
+
+async function mergeData(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            var backup = JSON.parse(e.target.result);
+            if (!backup.peptides && !backup.doses) { alert('That doesn\'t look like a PepBros backup file.'); return; }
+
+            var inPeps   = Array.isArray(backup.peptides)  ? backup.peptides  : [];
+            var inDoses  = Array.isArray(backup.doses)     ? backup.doses     : [];
+            var inCycles = Array.isArray(backup.cycles)    ? backup.cycles    : [];
+            var inProto  = Array.isArray(backup.protocols) ? backup.protocols : [];
+
+            var sum = inPeps.length + inDoses.length + inCycles.length + inProto.length;
+            if (!confirm('Merge this backup into your current data?\n\n' +
+                'It contains ' + inPeps.length + ' peptides, ' + inDoses.length + ' doses, ' +
+                inCycles.length + ' cycles, ' + inProto.length + ' protocols.\n\n' +
+                'Nothing will be deleted — duplicates are skipped.')) return;
+
+            // ── Peptides: match existing by id, else by name (re-point doses) ──
+            var existingPepById   = {};
+            var existingPepByName = {};
+            (appData.peptides || []).forEach(function(p) {
+                existingPepById[p.id] = p;
+                existingPepByName[(p.name || '').toLowerCase().trim()] = p;
+            });
+
+            var idRemap = {};   // oldPeptideId -> phonePeptideId
+            var addedPeps = 0;
+            for (var i = 0; i < inPeps.length; i++) {
+                var ip = inPeps[i];
+                if (!ip || !ip.id) continue;
+                var nameKey = (ip.name || '').toLowerCase().trim();
+                if (existingPepById[ip.id]) {
+                    // same id already here — keep ours
+                    continue;
+                }
+                if (nameKey && existingPepByName[nameKey]) {
+                    // same peptide by name — re-point its doses, don't duplicate
+                    idRemap[ip.id] = existingPepByName[nameKey].id;
+                    continue;
+                }
+                // genuinely new peptide — add with safe defaults for newer fields
+                if (ip.vialsOnHand   === undefined) ip.vialsOnHand   = 0;
+                if (ip.dosesPerWeek  === undefined) ip.dosesPerWeek  = 7;
+                if (!ip.color) ip.color = (typeof PEPTIDE_COLORS !== 'undefined' ? PEPTIDE_COLORS[0] : '#dc2626');
+                appData.peptides.push(ip);
+                existingPepById[ip.id] = ip;
+                if (nameKey) existingPepByName[nameKey] = ip;
+                await dbPut('peptides', ip);
+                addedPeps++;
+            }
+
+            // Build a name lookup for filling missing dose peptideNames
+            var pepNameById = {};
+            (appData.peptides || []).forEach(function(p) { pepNameById[p.id] = p.name; });
+            inPeps.forEach(function(p) { if (p && p.id && !pepNameById[p.id]) pepNameById[p.id] = p.name; });
+
+            // ── Doses: dedupe by composite key ──
+            var existingDoseKeys = {};
+            (appData.doses || []).forEach(function(d) { existingDoseKeys[doseKey(d)] = true; });
+
+            var addedDoses = 0, skippedDoses = 0;
+            for (var j = 0; j < inDoses.length; j++) {
+                var nd = normalizeDose(inDoses[j]);
+                if (!nd) { skippedDoses++; continue; }
+                // re-point peptideId if it mapped to an existing phone peptide
+                if (nd.peptideId && idRemap[nd.peptideId]) nd.peptideId = idRemap[nd.peptideId];
+                // backfill peptideName from id if missing
+                if (!nd.peptideName && nd.peptideId && pepNameById[nd.peptideId]) nd.peptideName = pepNameById[nd.peptideId];
+                var k = doseKey(nd);
+                if (existingDoseKeys[k]) { skippedDoses++; continue; }
+                existingDoseKeys[k] = true;
+                appData.doses.push(nd);
+                await dbPut('doses', nd);
+                addedDoses++;
+            }
+
+            // ── Cycles & protocols: dedupe by id ──
+            if (!appData.cycles) appData.cycles = [];
+            var addedCycles = 0;
+            var existingCycleIds = {};
+            (appData.cycles || []).forEach(function(c) { existingCycleIds[c.id] = true; });
+            for (var k2 = 0; k2 < inCycles.length; k2++) {
+                var ic = inCycles[k2];
+                if (!ic || !ic.id || existingCycleIds[ic.id]) continue;
+                if (ic.peptideId && idRemap[ic.peptideId]) ic.peptideId = idRemap[ic.peptideId];
+                appData.cycles.push(ic);
+                existingCycleIds[ic.id] = true;
+                await dbPut('cycles', ic);
+                addedCycles++;
+            }
+
+            var addedProto = 0;
+            if (!appData.protocols) appData.protocols = [];
+            var existingProtoIds = {};
+            appData.protocols.forEach(function(pr) { existingProtoIds[pr.id] = true; });
+            for (var m = 0; m < inProto.length; m++) {
+                var ipr = inProto[m];
+                if (!ipr || !ipr.id || existingProtoIds[ipr.id]) continue;
+                appData.protocols.push(ipr);
+                existingProtoIds[ipr.id] = true;
+                await dbPut('protocols', ipr);
+                addedProto++;
+            }
+
+            renderAll();
+            renderProtocolTemplatesList();
+            checkLowStockNotification();
+
+            alert('Merge complete!\n\n' +
+                'Added: ' + addedDoses + ' doses, ' + addedPeps + ' peptides, ' +
+                addedCycles + ' cycles, ' + addedProto + ' protocols.\n' +
+                'Skipped ' + skippedDoses + ' duplicate/invalid doses.');
+        } catch(err) {
+            alert('Merge failed: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
 async function clearAllData() {
     if (!confirm('Delete ALL data? This cannot be undone.')) return;
     if (!confirm('Are you absolutely sure?')) return;
