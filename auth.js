@@ -105,7 +105,8 @@ function renderAccountUI() {
             '<div class="auth-row">' +
                 '<button class="btn-ghost btn-small" onclick="forceSync()">⟳ Sync now</button>' +
                 '<button class="btn-ghost btn-small" onclick="signOutUser()">Sign out</button>' +
-            '</div>';
+            '</div>' +
+            '<p class="auth-sub" style="margin-top:6px;font-size:0.76rem;">🔒 Your data is private to your account and encrypted at rest. It also stays on this device, so the app keeps working offline.</p>';
     } else {
         box.innerHTML =
             '<p class="auth-sub">Sign in to back up your data and sync across devices. The app works without an account too.</p>' +

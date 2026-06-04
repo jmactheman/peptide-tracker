@@ -8,11 +8,28 @@
 // id-based; concurrent edits resolve by updatedAt, deletions by tombstone.
 
 var SYNC_DEBOUNCE_MS = 1500;
-var _pushTimer = null;
-var _busy      = false;   // single lock so pull/push never overlap
+var _pushTimer  = null;
+var _busy       = false;   // single lock so pull/push never overlap
+var _lastSyncAt = 0;       // ms timestamp of last successful full sync
 
 function syncEnabled() {
     return typeof authReady === 'function' && authReady();
+}
+
+function isOffline() {
+    return (typeof navigator !== 'undefined') && navigator.onLine === false;
+}
+
+// Which account owns the data currently on this device? (local-only marker)
+function getLocalOwner() { try { return localStorage.getItem('pb_owner_uid') || null; } catch (e) { return null; } }
+function setLocalOwner(uid) { try { localStorage.setItem('pb_owner_uid', uid); } catch (e) {} }
+
+// Drop this device's local data + sync bookkeeping (used when a DIFFERENT
+// account signs in, so one user's data never leaks into another's account).
+async function wipeLocalForSwitch() {
+    for (var i = 0; i < STORES.length; i++) await dbClear(STORES[i]);
+    await dbClear('_tombstones');
+    await dbClear('_pending');
 }
 
 async function resolveUid() {
@@ -161,14 +178,28 @@ async function reloadLocalUI() {
 // Full reconcile: pull → merge → refresh UI → push. Used on sign-in and "Sync now".
 async function fullSync() {
     if (!syncEnabled() || _busy) return;
+    if (isOffline()) { setSyncStatus('Offline — will sync when reconnected'); return; }
     _busy = true;
     try {
         var uid = await resolveUid();
         if (!uid) { setSyncStatus('Not signed in — sign in to sync.'); return; }
+
+        // Account-switch guard: if this device's data belongs to a different
+        // account, wipe it before pulling so it can't leak into this account.
+        var owner = getLocalOwner();
+        if (owner && owner !== uid) {
+            setSyncStatus('Switching account…');
+            await wipeLocalForSwitch();
+            await reloadLocalUI();
+        }
+
         setSyncStatus('Syncing…');
         var pulled = await _pullAll(uid);
         if (pulled) await reloadLocalUI();
         var pushed = await _pushAll(uid);
+
+        setLocalOwner(uid);
+        _lastSyncAt = Date.now();
         setSyncStatus('Synced ✓' + (pulled ? (' — restored ' + pulled) : '') +
                       (pushed ? (', sent ' + pushed) : (pulled ? '' : ' — up to date')));
     } catch (e) {
@@ -182,10 +213,15 @@ async function fullSync() {
 // Incremental push of local edits (debounced via onLocalChange).
 async function pushChanges() {
     if (!syncEnabled() || _busy) return;
+    if (isOffline()) { setSyncStatus('Offline — changes saved, will sync later'); return; }
     _busy = true;
+    var deferToFull = false;
     try {
         var uid = await resolveUid();
         if (!uid) return;
+        // Different account owns this device's data → needs a full reconcile, not a push.
+        var owner = getLocalOwner();
+        if (owner && owner !== uid) { deferToFull = true; return; }
         var n = await _pushPending(uid);
         if (n) setSyncStatus('Backed up ✓');
     } catch (e) {
@@ -194,6 +230,7 @@ async function pushChanges() {
     } finally {
         _busy = false;
     }
+    if (deferToFull) fullSync();
 }
 
 // Manual button.
@@ -212,4 +249,20 @@ function onLocalChange() {
 // auth.js calls this when a session becomes available (sign-in or returning).
 function onAuthReady(user, event) {
     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') fullSync();
+}
+
+// ── Auto-sync triggers ───────────────────────────────────────────────────────
+// Reconnect: flush + reconcile as soon as the network comes back.
+// Foreground: reconcile when the app becomes visible again, throttled so it
+// doesn't run on every quick tab switch.
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', function() { if (syncEnabled()) fullSync(); });
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible' && syncEnabled() && !isOffline()
+                && (Date.now() - _lastSyncAt > 30000)) {
+                fullSync();
+            }
+        });
+    }
 }
