@@ -86,7 +86,10 @@ function dbPut(store, obj, opts) {
                 tx.objectStore('_pending').put({ key: k, store: store, id: obj.id, op: 'put' });
                 tx.objectStore('_tombstones').delete(k); // un-delete on resurrection
             }
-            tx.oncomplete = function() { resolve(); };
+            tx.oncomplete = function() {
+                if (doSync && typeof onLocalChange === 'function') { try { onLocalChange(); } catch (e) {} }
+                resolve();
+            };
             tx.onerror    = function() { reject(tx.error); };
             tx.onabort    = function() { reject(tx.error); };
         });
@@ -114,7 +117,10 @@ function dbDelete(store, id, opts) {
             tx.objectStore(store).delete(id);
             tx.objectStore('_tombstones').put({ key: k, store: store, id: id, updatedAt: nowISO() });
             tx.objectStore('_pending').put({ key: k, store: store, id: id, op: 'delete' });
-            tx.oncomplete = function() { resolve(); };
+            tx.oncomplete = function() {
+                if (typeof onLocalChange === 'function') { try { onLocalChange(); } catch (e) {} }
+                resolve();
+            };
             tx.onerror    = function() { reject(tx.error); };
             tx.onabort    = function() { reject(tx.error); };
         });

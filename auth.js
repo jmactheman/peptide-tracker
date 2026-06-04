@@ -34,9 +34,9 @@ function initAuth() {
     sb.auth.onAuthStateChange(function(event, session) {
         authUser = session ? session.user : null;
         renderAccountUI();
-        // Increment 4/5 hooks cloud sync here on sign-in.
-        if (event === 'SIGNED_IN' && typeof onSignedIn === 'function') {
-            try { onSignedIn(authUser); } catch (e) { console.warn('[auth] onSignedIn error', e); }
+        // Hand off to the sync layer (push on sign-in / returning session).
+        if (session && typeof onAuthReady === 'function') {
+            try { onAuthReady(authUser, event); } catch (e) { console.warn('[auth] onAuthReady error', e); }
         }
     });
 }
@@ -101,7 +101,7 @@ function renderAccountUI() {
         var email = authUser.email || (authUser.user_metadata && authUser.user_metadata.email) || 'your account';
         box.innerHTML =
             '<p class="auth-status">✅ Signed in as <strong>' + esc(email) + '</strong></p>' +
-            '<p class="auth-sub">Your data backs up to this account. (Multi-device sync turns on in the next update.)</p>' +
+            '<p class="auth-sub" id="sync-status">Your data backs up to this account.</p>' +
             '<button class="btn-ghost btn-small" onclick="signOutUser()">Sign out</button>';
     } else {
         box.innerHTML =
