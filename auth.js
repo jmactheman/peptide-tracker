@@ -17,6 +17,7 @@ function initAuth() {
         // Library unavailable (offline / blocked). App still works locally.
         console.warn('[auth] Supabase library unavailable — running local-only.');
         renderAccountUI();
+        renderAccountStrip();
         return;
     }
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -26,14 +27,20 @@ function initAuth() {
     sb.auth.getSession().then(function(res) {
         authUser = (res && res.data && res.data.session) ? res.data.session.user : null;
         renderAccountUI();
+        renderAccountStrip();
+        maybeShowWelcome();
     }).catch(function(e) {
         console.warn('[auth] getSession failed:', e && e.message);
         renderAccountUI();
+        renderAccountStrip();
+        maybeShowWelcome();
     });
 
     sb.auth.onAuthStateChange(function(event, session) {
         authUser = session ? session.user : null;
         renderAccountUI();
+        renderAccountStrip();
+        if (authUser) { closeSignInSheet(); if (typeof closeModal === 'function') closeModal('welcome-modal'); }
         // Hand off to the sync layer (push on sign-in / returning session).
         if (session && typeof onAuthReady === 'function') {
             try { onAuthReady(authUser, event); } catch (e) { console.warn('[auth] onAuthReady error', e); }
@@ -46,22 +53,55 @@ function redirectURL() {
     return window.location.href.split('#')[0].split('?')[0];
 }
 
-async function signInWithMagicLink() {
-    if (!authReady()) { setAuthMsg('Sign-in unavailable right now (offline?).'); return; }
-    var input = document.getElementById('auth-email');
+// Generalized so both the Settings box and the sign-in sheet can reuse it.
+async function sendMagicLink(inputId, msgId, btnId) {
+    var msgEl = msgId ? document.getElementById(msgId) : null;
+    function msg(t) { if (msgEl) msgEl.textContent = t; }
+    if (!authReady()) { msg('Sign-in unavailable right now (offline?).'); return; }
+    var input = document.getElementById(inputId);
     var email = input ? (input.value || '').trim() : '';
-    if (!email) { setAuthMsg('Enter your email first.'); return; }
-    var btn = document.getElementById('auth-magic-btn');
+    if (!email) { msg('Enter your email first.'); return; }
+    var btn = btnId ? document.getElementById(btnId) : null;
     if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
         var res = await sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: redirectURL() } });
         if (res.error) throw res.error;
-        setAuthMsg('✅ Check your email for a sign-in link.');
+        msg('✅ Check your email for a sign-in link.');
     } catch (e) {
-        setAuthMsg('Error: ' + (e && e.message ? e.message : 'could not send link'));
+        msg('Error: ' + (e && e.message ? e.message : 'could not send link'));
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Send magic link'; }
     }
+}
+function signInWithMagicLink() { return sendMagicLink('auth-email', 'auth-msg', 'auth-magic-btn'); }
+function sheetMagic()          { return sendMagicLink('sheet-email', 'sheet-msg', 'sheet-magic-btn'); }
+
+// ── Account strip + sign-in sheet + first-launch welcome ─────────────────────
+function renderAccountStrip() {
+    var strip = document.getElementById('account-strip');
+    if (!strip) return;
+    if (!authReady() || authUser) { strip.style.display = 'none'; return; }
+    strip.style.display = 'flex';
+    strip.innerHTML =
+        '<span class="as-text">🔒 Not backed up — your data only lives on this device.</span>' +
+        '<button class="btn-primary btn-small" onclick="openSignInSheet()">Sign in</button>';
+}
+function openSignInSheet() {
+    var m = document.getElementById('signin-sheet');
+    if (m) m.classList.add('active');
+    setTimeout(function() { var i = document.getElementById('sheet-email'); if (i) i.focus(); }, 50);
+}
+function closeSignInSheet() { if (typeof closeModal === 'function') closeModal('signin-sheet'); }
+
+function maybeShowWelcome() {
+    try { if (localStorage.getItem('pb_welcome_dismissed')) return; } catch (e) {}
+    if (authReady() && authUser) return;   // already signed in → no welcome
+    var m = document.getElementById('welcome-modal');
+    if (m) m.classList.add('active');
+}
+function dismissWelcome() {
+    try { localStorage.setItem('pb_welcome_dismissed', '1'); } catch (e) {}
+    if (typeof closeModal === 'function') closeModal('welcome-modal');
 }
 
 async function signInWithGoogle() {

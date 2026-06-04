@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
 
@@ -28,6 +28,9 @@
             </div>
         </div>
     </header>
+
+    <!-- Account state strip (shown when signed out) -->
+    <div id="account-strip" class="account-strip" style="display:none;"></div>
 
     <!-- Desktop top tabs (hidden on mobile) -->
     <div class="tabs" id="desktop-tabs">
@@ -445,6 +448,35 @@
     </div>
 </div>
 
+<!-- Sign-in sheet (opened from the account strip / welcome) -->
+<div class="modal-overlay" id="signin-sheet">
+    <div class="modal">
+        <h2>Sign in</h2>
+        <p class="auth-sub">Back up your data and sync it across devices. The app works without an account too.</p>
+        <button class="btn-ghost btn-small auth-google" style="margin-top:12px;" onclick="signInWithGoogle()">Continue with Google</button>
+        <div class="auth-or"><span>or</span></div>
+        <div class="auth-row">
+            <input type="email" id="sheet-email" placeholder="you@email.com" autocomplete="email" inputmode="email">
+            <button class="btn-primary btn-small" id="sheet-magic-btn" onclick="sheetMagic()">Send magic link</button>
+        </div>
+        <p class="auth-msg" id="sheet-msg"></p>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeSignInSheet()">Maybe later</button>
+        </div>
+    </div>
+</div>
+
+<!-- First-launch welcome -->
+<div class="modal-overlay" id="welcome-modal">
+    <div class="modal" style="text-align:center;">
+        <img src="logo.png" alt="PepBros" style="height:54px;width:auto;margin:0 auto 8px;display:block;">
+        <h2 style="margin-bottom:8px;">Welcome to PepBros</h2>
+        <p class="auth-sub" style="margin-bottom:18px;">Track your peptides, doses, and cycles. Sign in to back up your data and sync across devices — or start now and sign in anytime.</p>
+        <button class="btn-primary auth-google" style="width:100%;margin-bottom:10px;" onclick="signInWithGoogle()">Continue with Google</button>
+        <button class="btn-ghost btn-small" style="width:100%;" onclick="dismissWelcome()">Use without an account</button>
+    </div>
+</div>
+
 <div class="modal-overlay" id="reconstitute-modal">
     <div class="modal">
         <h2>💧 Reconstitute Vial</h2>
@@ -681,12 +713,12 @@
     </div>
 </div>
 
-<script src="data.js?v=25"></script>
-<script src="db.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="data.js?v=26"></script>
+<script src="db.js?v=26"></script>
+<script src="app.js?v=26"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=25"></script>
-<script src="sync.js?v=25"></script>
+<script src="auth.js?v=26"></script>
+<script src="sync.js?v=26"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

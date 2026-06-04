@@ -1485,3 +1485,8 @@ details[open] > .adv-summary::after { transform: rotate(90deg); }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .auth-google { align-self: flex-start; }
 .auth-msg { font-size: 0.82rem; color: var(--text-secondary); margin: 2px 0 0; min-height: 1.1em; }
+
+/* ── ACCOUNT STRIP (sign-in discoverability) ──────────────────── */
+.account-strip { align-items:center; gap:10px; background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.30); border-radius:10px; padding:8px 12px; margin-bottom:14px; font-size:0.85rem; }
+.account-strip .as-text { flex:1; color:var(--text-primary); line-height:1.35; }
+.account-strip .btn-small { flex-shrink:0; }
