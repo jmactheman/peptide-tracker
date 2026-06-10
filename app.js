@@ -1652,7 +1652,7 @@ var logDoseState = {
     showWarning:      false,
     noteOpen:         false,
     moreSitesOpen:    false,
-    siteView:         'list',
+    siteView:         'map',
     autoDismissTimer: null,
     lastSnapshot:     null
 };
@@ -1733,22 +1733,6 @@ function ldGetCyclePos(peptideId) {
     var diffDays = Math.max(0, Math.floor((t - start) / 86400000));
     var week = Math.min(c.plannedDuration, Math.floor(diffDays / 7) + 1);
     return week + ' / ' + c.plannedDuration;
-}
-
-function ldGetStreak() {
-    var doses = appData.doses || [];
-    if (!doses.length) return 0;
-    var dateSet = {};
-    doses.forEach(function(d) { if (d.date) dateSet[d.date] = true; });
-    var cursor = new Date(); cursor.setHours(0,0,0,0);
-    // If today has no dose yet, start counting from yesterday
-    if (!dateSet[localDateStr(cursor)]) cursor.setDate(cursor.getDate() - 1);
-    var streak = 0;
-    while (dateSet[localDateStr(cursor)] && streak < 999) {
-        streak++;
-        cursor.setDate(cursor.getDate() - 1);
-    }
-    return streak;
 }
 
 function ldStatusOf(daysSince, isRecommended) {
@@ -1893,10 +1877,8 @@ function renderLogDosePlate() {
     logDoseState.showWarning   = showWarn;
 
     // Show all form sections (in case they were hidden by empty state)
-    ['ld-log-card','ld-eyebrow','ld-hero-plate'].forEach(function(elId) {
-        var el = document.getElementById(elId);
-        if (el) el.style.display = '';
-    });
+    var logCard = document.getElementById('ld-log-card');
+    if (logCard) logCard.style.display = '';
     var fieldsEl = document.getElementById('ld-log-fields');
     if (fieldsEl) fieldsEl.style.display = '';
     var emptyEl  = document.getElementById('ld-empty-msg');
@@ -1915,22 +1897,7 @@ function renderLogDosePlate() {
     // Refresh the "X units" readout from the current dose-amount value
     ldRecalcUnits();
 
-    // ── Section eyebrow ──
-    var isRec = !!sel && (sel === recommended);
-    var eyebrowLbl = document.getElementById('ld-eyebrow-label');
-    eyebrowLbl.textContent = !sel ? 'Choose a site' : (isRec ? 'Suggested site' : 'Selected site');
-    eyebrowLbl.classList.toggle('rec', isRec);
-
-    // ── Hero plate ──
     var rs = ldFormatRegionSide(sel);
-    document.getElementById('ld-hero-region').textContent = rs.region;
-    document.getElementById('ld-hero-side').textContent   = rs.side;
-    document.getElementById('ld-stat-last').textContent =
-        selDays === Infinity ? 'never' : (selDays === 0 ? 'today' : selDays + 'd ago');
-    document.getElementById('ld-stat-cycle').textContent =
-        isOffRot ? 'off-rot' : (ldGetCyclePos(p.id) || '—');
-    var streak = ldGetStreak();
-    document.getElementById('ld-stat-streak').textContent = streak ? (streak + 'd') : '—';
 
     // ── Off-rotation warning ──
     var warning = document.getElementById('ld-warning');
@@ -1968,9 +1935,10 @@ function renderLogDosePlate() {
     if (vbList) vbList.classList.toggle('active', !isMap);
     if (vbMap)  vbMap.classList.toggle('active', isMap);
 
-    // ── Grid label ──
+    // ── Section label carries the selection state ──
+    var isRec = !!sel && (sel === recommended);
     document.getElementById('ld-choose-label').textContent =
-        isMap ? 'Tap a site' : (repertoire ? 'Your sites' : 'All sites');
+        !sel ? 'Choose a site' : (isRec ? 'Site · suggested' : 'Site · selected');
 }
 
 function ldSetSiteView(v) {
@@ -2032,8 +2000,6 @@ function ldToggleMoreSites() {
 
 function renderLogDoseEmptyState() {
     // Hide active form sections, show simple empty message inside the peptide card area
-    document.getElementById('ld-eyebrow').style.display    = 'none';
-    document.getElementById('ld-hero-plate').style.display = 'none';
     document.getElementById('ld-warning').style.display    = 'none';
     document.getElementById('ld-note-card').style.display  = 'none';
     var primaryWrap = document.querySelector('.ld-primary-wrap');
