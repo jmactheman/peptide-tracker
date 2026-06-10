@@ -248,7 +248,10 @@ function buildColorPicker(containerId, onSelect, currentColor) {
 }
 
 // ── TAB NAVIGATION ───────────────────────────────────────────
+var currentTab = 'dashboard';
+
 function switchTab(tabId) {
+    currentTab = tabId;
     // Update tab content
     document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
     var target = document.getElementById(tabId);
@@ -672,6 +675,20 @@ function renderSupply() {
         var doseRow = (dAmt || p.dailyDose)
             ? '<div class="peptide-info-row"><span class="info-label">Your Dose</span><span class="info-value">' + (dAmt || '—') + ' ' + du + ' × ' + p.dosesPerWeek + '/wk</span></div>'
             : '';
+        // Quick mode tracks no vials — "Size 0 mg/vial" and "Est. Supply 0 days"
+        // are noise. Show when the peptide was last logged instead.
+        var lastLoggedRow = '';
+        if (simple) {
+            var lastDose = (appData.doses || [])
+                .filter(function(d) { return d.peptideId === p.id; })
+                .sort(function(a, b) { return b.date.localeCompare(a.date); })[0];
+            var lastTxt = '—';
+            if (lastDose) {
+                var dAgo = ldDaysSinceDate(lastDose.date);
+                lastTxt = dAgo === 0 ? 'Today' : (dAgo === 1 ? 'Yesterday' : dAgo + ' days ago');
+            }
+            lastLoggedRow = '<div class="peptide-info-row"><span class="info-label">Last Logged</span><span class="info-value">' + lastTxt + '</span></div>';
+        }
         var cycleRow = (!simple && p.cycleDuration)
             ? '<div class="peptide-info-row"><span class="info-label">Cycle Duration</span><span class="info-value">' + p.cycleDuration + ' weeks</span></div>'
             : '';
@@ -692,9 +709,9 @@ function renderSupply() {
             '<h3><span class="color-dot" style="background:' + pColor + ';"></span>' + eName + (acyc ? ' <span class="status-badge status-cycle">● Active</span>' : '') + '</h3>' +
             '<div class="peptide-info">' +
             (st ? '<div class="peptide-info-row"><span class="info-label">Vials on Hand</span><span class="info-value">' + p.vialsOnHand + ' <span class="status-badge ' + st.cls + '">' + st.txt + '</span></span></div>' : '') +
-            '<div class="peptide-info-row"><span class="info-label">Size</span><span class="info-value">' + p.mgPerVial + ' ' + p.unit + '/vial</span></div>' +
-            doseRow + cycleRow +
-            '<div class="peptide-info-row"><span class="info-label">Est. Supply</span><span class="info-value">' + sup + '</span></div>' +
+            (!simple ? '<div class="peptide-info-row"><span class="info-label">Size</span><span class="info-value">' + p.mgPerVial + ' ' + p.unit + '/vial</span></div>' : '') +
+            doseRow + cycleRow + lastLoggedRow +
+            (!simple ? '<div class="peptide-info-row"><span class="info-label">Est. Supply</span><span class="info-value">' + sup + '</span></div>' : '') +
             projHtml + '</div>' +
             reconHtml +
             '<div class="peptide-actions">' +
@@ -1635,6 +1652,7 @@ var logDoseState = {
     showWarning:      false,
     noteOpen:         false,
     moreSitesOpen:    false,
+    siteView:         'list',
     autoDismissTimer: null,
     lastSnapshot:     null
 };
@@ -1934,12 +1952,30 @@ function renderLogDosePlate() {
     // Hidden site input feeds the submit handler
     document.getElementById('injection-site').value = sel || '';
 
-    // ── Chip grid ──
-    renderLdChipGrid(lastUsedMap, recommended, repertoire);
+    // ── Site section: chip list or body map ──
+    var isMap    = logDoseState.siteView === 'map';
+    var chipGrid = document.getElementById('ld-chip-grid');
+    var bodyMap  = document.getElementById('ld-body-map');
+    if (chipGrid) chipGrid.style.display = isMap ? 'none' : '';
+    if (bodyMap)  bodyMap.style.display  = isMap ? '' : 'none';
+    if (isMap && bodyMap) {
+        renderSiteRotation('ld-body-map', 'selectLogDoseSite', p.id);
+    } else {
+        renderLdChipGrid(lastUsedMap, recommended, repertoire);
+    }
+    var vbList = document.getElementById('ld-view-btn-list');
+    var vbMap  = document.getElementById('ld-view-btn-map');
+    if (vbList) vbList.classList.toggle('active', !isMap);
+    if (vbMap)  vbMap.classList.toggle('active', isMap);
 
     // ── Grid label ──
     document.getElementById('ld-choose-label').textContent =
-        repertoire ? 'Your sites' : 'All sites';
+        isMap ? 'Tap a site' : (repertoire ? 'Your sites' : 'All sites');
+}
+
+function ldSetSiteView(v) {
+    logDoseState.siteView = v;
+    renderLogDosePlate();
 }
 
 function renderLdChipGrid(lastUsedMap, recommended, repertoire) {
@@ -2118,14 +2154,15 @@ function showLoggedScreen(dose, p) {
     // Reset for next use
     logDoseState.selectedSite = null;
 
-    // Clear any prior timer, then auto-dismiss to dashboard
+    // Clear any prior timer, then auto-dismiss back to where the log started
+    var returnTab = currentTab || 'dashboard';
     if (logDoseState.autoDismissTimer) clearTimeout(logDoseState.autoDismissTimer);
     logDoseState.autoDismissTimer = setTimeout(function() {
         logDoseState.autoDismissTimer = null;
         logDoseState.lastSnapshot = null;
         // Re-render plate so next time tracking opens it's fresh
         renderLogDosePlate();
-        switchTab('dashboard');
+        switchTab(returnTab);
     }, 1500);
 }
 
@@ -2200,12 +2237,12 @@ var BODY_SITE_POSITIONS = {
     }
 };
 
-function toggleBodyView(v, containerId, callbackFn) {
+function toggleBodyView(v, containerId, callbackFn, peptideId) {
     bodyView = v;
-    renderSiteRotation(containerId, callbackFn);
+    renderSiteRotation(containerId, callbackFn, peptideId);
 }
 
-function renderSiteRotation(containerId, callbackFn) {
+function renderSiteRotation(containerId, callbackFn, peptideId) {
     containerId = containerId || 'rotation-grid';
     callbackFn  = callbackFn  || 'selectSiteFromBody';
     var grid = document.getElementById(containerId);
@@ -2225,11 +2262,15 @@ function renderSiteRotation(containerId, callbackFn) {
     var positions = BODY_SITE_POSITIONS[bodyView];
     var viewSites = allSites.filter(function(s) { return positions[s]; });
 
-    // Next = least-recently-used (or unused) across ALL sites (not just visible ones)
-    var sorted = allSites.slice().sort(function(a,b) {
-        return (lastUsed[b] !== undefined ? lastUsed[b] : 999) - (lastUsed[a] !== undefined ? lastUsed[a] : 999);
-    });
-    var next = sorted[sorted.length - 1];
+    // Next = the repertoire-aware suggestion when we know the peptide,
+    // else least-recently-used (or unused) across ALL sites
+    var next = peptideId ? ldGetRecommended(peptideId) : null;
+    if (!next) {
+        var sorted = allSites.slice().sort(function(a,b) {
+            return (lastUsed[b] !== undefined ? lastUsed[b] : 999) - (lastUsed[a] !== undefined ? lastUsed[a] : 999);
+        });
+        next = sorted[sorted.length - 1];
+    }
 
     function colorFor(site) {
         var idx = lastUsed[site];
@@ -2264,10 +2305,11 @@ function renderSiteRotation(containerId, callbackFn) {
         '</svg>';
 
     var iF = bodyView === 'front';
+    var pidArg = peptideId ? '\'' + peptideId + '\'' : 'null';
     var toggle =
         '<div class="body-view-toggle">' +
-            '<button class="body-view-btn' + (iF ? ' active' : '') + '" onclick="toggleBodyView(\'front\',\'' + containerId + '\',\'' + callbackFn + '\')">Front</button>' +
-            '<button class="body-view-btn' + (!iF ? ' active' : '') + '" onclick="toggleBodyView(\'back\',\'' + containerId + '\',\'' + callbackFn + '\')">Back</button>' +
+            '<button type="button" class="body-view-btn' + (iF ? ' active' : '') + '" onclick="toggleBodyView(\'front\',\'' + containerId + '\',\'' + callbackFn + '\',' + pidArg + ')">Front</button>' +
+            '<button type="button" class="body-view-btn' + (!iF ? ' active' : '') + '" onclick="toggleBodyView(\'back\',\'' + containerId + '\',\'' + callbackFn + '\',' + pidArg + ')">Back</button>' +
         '</div>';
 
     var legend =
@@ -2281,6 +2323,15 @@ function renderSiteRotation(containerId, callbackFn) {
         '</div>';
 
     grid.innerHTML = toggle + '<div class="body-diagram-row">' + bodySvg + legend + '</div>';
+
+    // Re-mark the current selection (lost on innerHTML rebuild / front-back flip)
+    var selSite = null;
+    if (containerId === 'ld-body-map')      selSite = logDoseState.selectedSite;
+    if (containerId === 'site-picker-grid') selSite = sitePickerSelectedSite;
+    if (selSite) {
+        var g = grid.querySelector('.body-site[data-site="' + selSite.replace(/"/g, '\\"') + '"]');
+        if (g) g.classList.add('selected');
+    }
 }
 
 function selectSiteFromBody(site) {
@@ -2815,7 +2866,7 @@ function showSitePickerModal(peptideId, scheduledTime, dateStr) {
         }
     }
     document.getElementById('site-picker-modal').classList.add('active');
-    renderSiteRotation('site-picker-grid', 'selectSiteForModal');
+    renderSiteRotation('site-picker-grid', 'selectSiteForModal', peptideId);
 }
 
 async function confirmSitePickerLog() {

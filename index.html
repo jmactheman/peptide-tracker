@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=28">
+    <link rel="stylesheet" href="styles.css?v=29">
 </head>
 <body>
 
@@ -236,6 +236,19 @@
                     <div class="ld-warning-text" id="ld-warning-text"></div>
                 </div>
 
+                <!-- Site chip grid / body map -->
+                <div class="ld-choose-section">
+                    <div class="ld-choose-head">
+                        <div class="ld-choose-label" id="ld-choose-label">Your sites</div>
+                        <div class="ld-site-view-toggle">
+                            <button type="button" class="ld-view-btn active" id="ld-view-btn-list" onclick="ldSetSiteView('list')">List</button>
+                            <button type="button" class="ld-view-btn" id="ld-view-btn-map" onclick="ldSetSiteView('map')">Map</button>
+                        </div>
+                    </div>
+                    <div class="ld-chip-grid" id="ld-chip-grid"></div>
+                    <div id="ld-body-map" style="display:none;"></div>
+                </div>
+
                 <!-- Note card (collapsed by default) -->
                 <div class="ld-note-card" id="ld-note-card" style="display:none;">
                     <div class="ld-note-header">
@@ -252,20 +265,14 @@
                     </div>
                 </div>
 
-                <!-- Primary log button -->
-                <div class="ld-primary-wrap">
-                    <button type="submit" class="ld-primary-btn" id="ld-primary-btn">Log Dose</button>
-                </div>
-
                 <!-- Add note link -->
                 <div class="ld-add-note-wrap">
                     <button type="button" class="ld-add-note-link" id="ld-add-note-link" onclick="ldToggleNote()">+ Add note</button>
                 </div>
 
-                <!-- Site chip grid -->
-                <div class="ld-choose-section">
-                    <div class="ld-choose-label" id="ld-choose-label">Or choose another</div>
-                    <div class="ld-chip-grid" id="ld-chip-grid"></div>
+                <!-- Primary log button (sticky above bottom nav) -->
+                <div class="ld-primary-wrap">
+                    <button type="submit" class="ld-primary-btn" id="ld-primary-btn">Log Dose</button>
                 </div>
 
             </form>
@@ -749,12 +756,12 @@
     </div>
 </div>
 
-<script src="data.js?v=28"></script>
-<script src="db.js?v=28"></script>
-<script src="app.js?v=28"></script>
+<script src="data.js?v=29"></script>
+<script src="db.js?v=29"></script>
+<script src="app.js?v=29"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=28"></script>
-<script src="sync.js?v=28"></script>
+<script src="auth.js?v=29"></script>
+<script src="sync.js?v=29"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

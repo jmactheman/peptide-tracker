@@ -1,6 +1,6 @@
 'use strict';
 
-var CACHE = 'pepbros-v43';
+var CACHE = 'pepbros-v44';
 var ASSETS = [
     '/peptide-tracker/',
     '/peptide-tracker/index.html',
@@ -13,7 +13,9 @@ var ASSETS = [
     '/peptide-tracker/manifest.json',
     '/peptide-tracker/icon.png',
     '/peptide-tracker/icon.svg',
-    '/peptide-tracker/logo.png'
+    '/peptide-tracker/logo.png',
+    '/peptide-tracker/silhouette-front.png',
+    '/peptide-tracker/silhouette-back.png'
 ];
 
 // Pre-cache on install and take over immediately

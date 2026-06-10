@@ -497,6 +497,9 @@ button {
     /* Supply grid: single column */
     .supply-grid { grid-template-columns:1fr; }
 
+    /* Keep the Log Dose CTA above the bottom nav */
+    .ld-primary-wrap { bottom: calc(66px + env(safe-area-inset-bottom)); }
+
     /* Calendar: compact, swap text chips → dots */
     .cal-day { min-height:55px; padding:3px; }
     .cal-dose { display:none; }
@@ -823,6 +826,20 @@ button {
 .ld-form-input:focus {
     border-color: var(--accent);
 }
+/* Date/time share a 50% column on 375px screens — trim padding so the
+   value and picker icon both fit without clipping */
+.ld-form-date,
+.ld-form-time {
+    padding-left: 10px;
+    padding-right: 8px;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+}
+.ld-form-date::-webkit-calendar-picker-indicator,
+.ld-form-time::-webkit-calendar-picker-indicator {
+    margin-left: 2px;
+    padding: 0;
+}
 /* Native dropdown chevron rendered via inline SVG (gray, right-aligned) */
 .ld-form-select {
     background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%2371717a' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -1055,8 +1072,13 @@ button {
     color: var(--accent);
 }
 
-/* Primary CTA */
-.ld-primary-wrap { padding: 14px 18px 0; }
+/* Primary CTA — sticks to the bottom of the viewport while the form scrolls */
+.ld-primary-wrap {
+    padding: 14px 18px 0;
+    position: sticky;
+    bottom: 10px;
+    z-index: 50;
+}
 .ld-primary-btn {
     width: 100%;
     padding: 17px;
@@ -1069,6 +1091,7 @@ button {
     cursor: pointer;
     font-family: inherit;
     transition: background 0.15s;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
 }
 .ld-primary-btn:hover { background: var(--accent-hover); }
 .ld-primary-btn:disabled {
@@ -1095,6 +1118,11 @@ button {
 
 /* Site chip grid */
 .ld-choose-section { padding: 20px 18px 0; }
+.ld-choose-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
 .ld-choose-label {
     font-size: 11px;
     color: var(--text-secondary);
@@ -1102,6 +1130,30 @@ button {
     text-transform: uppercase;
     font-weight: 600;
     padding: 0 4px 10px;
+}
+.ld-site-view-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 2px;
+    margin-bottom: 10px;
+}
+.ld-view-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 100px;
+    cursor: pointer;
+    font-family: inherit;
+}
+.ld-view-btn.active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 .ld-chip-grid {
     display: grid;
