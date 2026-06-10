@@ -867,25 +867,25 @@ async function deletePeptide(id) {
 }
 
 // ── CYCLES ────────────────────────────────────────────────────
-function startCycle(peptideId, date) {
+function startCycle(peptideId, date, durationWeeks) {
     if (!appData.cycles) appData.cycles = [];
-    if (appData.cycles.find(function(c) { return c.peptideId === peptideId && c.status === 'active'; })) return;
+    if (appData.cycles.find(function(c) { return c.peptideId === peptideId && c.status === 'active'; })) return null;
     var p = appData.peptides.find(function(x) { return x.id === peptideId; });
-    if (!p) return;
-    var ped = null;
-    if (p.cycleDuration) {
-        var d = new Date(date + 'T00:00:00');
-        d.setDate(d.getDate() + p.cycleDuration * 7);
-        ped = localDateStr(d);
-    }
+    if (!p) return null;
+    // A cycle without a duration renders as nonsense (1/?, 0d left) — refuse.
+    var dur = durationWeeks || p.cycleDuration;
+    if (!dur || dur < 1) return null;
+    var d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() + dur * 7);
     var cycle = {
         id: genId(), peptideId: peptideId, peptideName: p.name,
         color: p.color || 'var(--accent)', startDate: date,
-        endDate: null, plannedDuration: p.cycleDuration || 0,
-        plannedEndDate: ped, status: 'active', createdAt: new Date().toISOString()
+        endDate: null, plannedDuration: dur,
+        plannedEndDate: localDateStr(d), status: 'active', createdAt: new Date().toISOString()
     };
     appData.cycles.push(cycle);
     dbPut('cycles', cycle);
+    return cycle;
 }
 
 async function endCycle(cycleId) {
@@ -966,8 +966,9 @@ function cycleDailyDoseStr(p) {
     return dispAmt(p.dailyDose, p) + ' ' + dispUnit(p);
 }
 function cycleScheduleDays(p) {
-    if (!p || !p.schedule || !p.schedule.mode) return null;
-    var s = p.schedule;
+    if (!p) return null;
+    var s = effectiveSchedule(p);
+    if (!s || !s.mode) return null;
     if (s.mode === 'daily') return [0,1,2,3,4,5,6];
     if (s.mode === 'specificDays' && Array.isArray(s.days)) return s.days.slice().sort(function(a,b){return a-b;});
     return null;
@@ -1036,6 +1037,8 @@ function buildCycleRing(pct, color, size, stroke, label) {
 // ── Hero card ─────────────────────────────────────────────────
 function renderHeroCard(c, p) {
     var color = c.color || 'var(--accent)';
+    // Quick-mode peptides don't track vials — suppress the supply gauge/warning
+    var simple = !p || (p.trackingMode || 'simple') === 'simple';
     var wk = cycleWeekOf(c);
     var pct = cyclePct(c);
     var dl = cycleDaysLeft(c);
@@ -1044,7 +1047,7 @@ function renderHeroCard(c, p) {
     var totalVials = vialsUsed + vialsLeft;
     var dosesLeft = cycleDosesLeft(c, p);
     var supplyDays = cycleSupplyDays(c, p);
-    var runsOutShort = supplyDays < dl;
+    var runsOutShort = !simple && supplyDays < dl;
     var pctSupply = totalVials > 0 ? (vialsLeft / totalVials) * 100 : 0;
     var dpw = p ? (p.dosesPerWeek || 0) : 0;
     var doseStr = cycleDailyDoseStr(p);
@@ -1094,6 +1097,7 @@ function renderHeroCard(c, p) {
             '</div>' +
             '<button class="cyc-chevron-btn" onclick="event.stopPropagation();showCycleDetail(\'' + c.id + '\')">›</button>' +
         '</div>' +
+        (simple ? '' :
         '<div style="margin-top:14px;">' +
             '<div class="cyc-gauge-track">' +
                 '<div class="cyc-gauge-fill" style="width:' + pctSupply.toFixed(1) + '%;background:' + gaugeColor + ';border-radius:5px;"></div>' +
@@ -1103,7 +1107,7 @@ function renderHeroCard(c, p) {
                 '<span style="font-size:10.5px;color:' + captionColor + ';font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;font-weight:600;">' + vialsLeft.toFixed(1) + ' vials · ' + dosesLeft + ' doses</span>' +
                 '<span style="font-size:10.5px;color:' + rightCaptionColor + ';font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">' + rightCaption + '</span>' +
             '</div>' +
-        '</div>' +
+        '</div>') +
         '<div class="cyc-rhythm-grid">' +
             '<div>' +
                 '<div class="cyc-micro-lbl">THIS WK</div>' +
@@ -1195,7 +1199,7 @@ function renderCycles() {
                 '</svg>' +
                 '<div style="font-size:17px;font-weight:700;letter-spacing:-0.01em;">No active cycles</div>' +
                 '<div style="font-size:12.5px;color:#71717a;margin-top:6px;line-height:1.4;max-width:240px;margin-left:auto;margin-right:auto;">Start a new cycle to track dosing, supply, and adherence over time.</div>' +
-                '<button class="cyc-start-btn" onclick="startCycleFromEmpty()">+ Start a cycle</button>' +
+                '<button class="cyc-start-btn" onclick="openStartCycleSheet()">+ Start a cycle</button>' +
                 quickPillsHtml +
             '</div>' +
         '</div>';
@@ -1219,18 +1223,18 @@ function renderCycles() {
         return;
     }
 
+    // Supply shortfall only applies to vial-tracked peptides
+    function cycleNeedsSupply(c) {
+        var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+        if (!p || (p.trackingMode || 'simple') === 'simple') return false;
+        return cycleSupplyDays(c, p) < cycleDaysLeft(c);
+    }
+
     var sorted = active.slice().sort(function(a, b) {
-        var pa = appData.peptides.find(function(x) { return x.id === a.peptideId; });
-        var pb = appData.peptides.find(function(x) { return x.id === b.peptideId; });
-        var aCrit = cycleSupplyDays(a, pa) < cycleDaysLeft(a) ? 0 : 1;
-        var bCrit = cycleSupplyDays(b, pb) < cycleDaysLeft(b) ? 0 : 1;
-        return aCrit - bCrit;
+        return (cycleNeedsSupply(a) ? 0 : 1) - (cycleNeedsSupply(b) ? 0 : 1);
     });
 
-    var critCount = sorted.filter(function(c) {
-        var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
-        return cycleSupplyDays(c, p) < cycleDaysLeft(c);
-    }).length;
+    var critCount = sorted.filter(cycleNeedsSupply).length;
 
     var subtitle = active.length + ' active · ' +
         (critCount > 0 ? critCount + ' need supply' : completed.length + ' completed');
@@ -1285,7 +1289,8 @@ function showCycleDetail(cycleId) {
     var totalVials = vialsUsed + vialsLeft;
     var dosesLeft = cycleDosesLeft(c, p);
     var supplyDays = cycleSupplyDays(c, p);
-    var runsOutShort = supplyDays < dl;
+    var simple = !p || (p.trackingMode || 'simple') === 'simple';
+    var runsOutShort = !simple && supplyDays < dl;
 
     var scheduleDays = cycleScheduleDays(p);
     var actualDoses = getCycleDoses(cycleId).length;
@@ -1383,6 +1388,7 @@ function showCycleDetail(cycleId) {
                 '</div>' +
             '</div>' +
         '</div>' +
+        (simple ? '' :
         '<div style="padding:12px 18px 0;">' +
             '<span class="cyc-section-lbl">SUPPLY</span>' +
             '<div class="cyc-panel-card">' +
@@ -1401,7 +1407,7 @@ function showCycleDetail(cycleId) {
                     '<span>TOTAL ' + totalVials.toFixed(1) + '</span>' +
                 '</div>' +
             '</div>' +
-        '</div>' +
+        '</div>') +
         '<div style="padding:14px 18px 0;">' +
             '<span class="cyc-section-lbl">THIS WEEK</span>' +
             '<div class="cyc-panel-card">' +
@@ -1433,13 +1439,54 @@ function goToCycleDetail(cycleId) {
     showCycleDetail(cycleId);
 }
 
-function startCycleFromEmpty() {
-    var active = (appData.cycles || []).filter(function(c) { return c.status === 'active'; });
-    var activePids = active.map(function(c) { return c.peptideId; });
-    var avail = (appData.peptides || []).find(function(p) { return activePids.indexOf(p.id) === -1; });
-    if (!avail) { alert('All peptides already have active cycles.'); return; }
-    startCycleManual(avail.id);
+// ── Start-a-cycle sheet ───────────────────────────────────────
+function openStartCycleSheet(peptideId) {
+    var activePids = (appData.cycles || [])
+        .filter(function(c) { return c.status === 'active'; })
+        .map(function(c) { return c.peptideId; });
+    var avail = (appData.peptides || []).filter(function(p) { return activePids.indexOf(p.id) === -1; });
+    if (!avail.length) {
+        alert((appData.peptides || []).length
+            ? 'All peptides already have active cycles.'
+            : 'Add a peptide in Supply first.');
+        return;
+    }
+    var sel = document.getElementById('sc-peptide');
+    sel.innerHTML = avail.map(function(p) {
+        return '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>';
+    }).join('');
+    if (peptideId && avail.find(function(p) { return p.id === peptideId; })) sel.value = peptideId;
+    scPrefillWeeks();
+    document.getElementById('sc-date').value = localDateStr();
+    document.getElementById('start-cycle-modal').classList.add('active');
 }
+
+// Prefill duration from the peptide's configured cycle length, else its most
+// recent cycle — Quick-mode peptides usually have neither, leaving it blank.
+function scPrefillWeeks() {
+    var pid = document.getElementById('sc-peptide').value;
+    var p = (appData.peptides || []).find(function(x) { return x.id === pid; });
+    var last = (appData.cycles || [])
+        .filter(function(c) { return c.peptideId === pid && c.plannedDuration; })
+        .sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); })[0];
+    document.getElementById('sc-weeks').value =
+        (p && p.cycleDuration) || (last && last.plannedDuration) || '';
+}
+
+document.getElementById('sc-peptide').addEventListener('change', scPrefillWeeks);
+
+document.getElementById('start-cycle-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var pid   = document.getElementById('sc-peptide').value;
+    var weeks = parseInt(document.getElementById('sc-weeks').value, 10);
+    var date  = document.getElementById('sc-date').value || localDateStr();
+    if (!pid || !weeks || weeks < 1) { alert('Pick a peptide and a duration in weeks.'); return; }
+    var c = startCycle(pid, date, weeks);
+    if (!c) { alert('Could not start the cycle.'); return; }
+    closeModal('start-cycle-modal');
+    renderSupply();
+    renderCycles();
+});
 
 // openCycleModal: redirect to inline detail so endCycle closeModal('cycle-modal') stays safe
 function openCycleModal(cycleId) {
@@ -1587,6 +1634,7 @@ var logDoseState = {
     isOffRotation:    false,
     showWarning:      false,
     noteOpen:         false,
+    moreSitesOpen:    false,
     autoDismissTimer: null,
     lastSnapshot:     null
 };
@@ -1618,10 +1666,39 @@ function ldGetPeptideLastUsedMap(peptideId) {
     return map;
 }
 
+// Sites the user actually uses, learned from dose history. Prefers this
+// peptide's own history, falls back to all doses. Returns null while there
+// isn't enough history to know (cold start) — callers must not guess then.
+function ldGetRepertoire(peptideId) {
+    function distinctSites(doses) {
+        var seen = {}, out = [];
+        doses.forEach(function(d) {
+            if (d.site && LD_CANONICAL_SITES.indexOf(d.site) > -1 && !seen[d.site]) {
+                seen[d.site] = true;
+                out.push(d.site);
+            }
+        });
+        return out;
+    }
+    var all = (appData.doses || []).filter(function(d) { return d.site; });
+    var own = all.filter(function(d) { return d.peptideId === peptideId; });
+    if (own.length >= 5) {
+        var sites = distinctSites(own);
+        if (sites.length) return sites;
+    }
+    if (all.length >= 5) {
+        var gsites = distinctSites(all);
+        if (gsites.length) return gsites;
+    }
+    return null;
+}
+
 function ldGetRecommended(peptideId) {
+    var rep = ldGetRepertoire(peptideId);
+    if (!rep) return null; // cold start — don't suggest sites the user may never use
     var map = ldGetPeptideLastUsedMap(peptideId);
     var best = null, bestDays = -1;
-    LD_CANONICAL_SITES.forEach(function(s) {
+    rep.forEach(function(s) {
         var days = (map[s] === undefined) ? Infinity : map[s];
         if (days > bestDays) { bestDays = days; best = s; }
     });
@@ -1772,8 +1849,9 @@ function renderLogDosePlate() {
     var metaUnitEl = document.getElementById('ld-meta-unit');
     if (metaUnitEl) metaUnitEl.textContent = dispUnit(p);
 
-    // Rotation calc
+    // Rotation calc — suggestions rotate within the user's learned repertoire
     var lastUsedMap = ldGetPeptideLastUsedMap(p.id);
+    var repertoire  = ldGetRepertoire(p.id);
     var recommended = ldGetRecommended(p.id);
     logDoseState.recommendedSite = recommended;
 
@@ -1781,10 +1859,18 @@ function renderLogDosePlate() {
     if (!logDoseState.selectedSite) logDoseState.selectedSite = recommended;
     var sel = logDoseState.selectedSite;
 
-    // Off-rotation flags
-    var isOffRot   = (sel !== recommended);
+    // Off-rotation flags — no recommendation (cold start) means nothing to be off of
+    var isOffRot   = recommended ? (sel !== recommended) : false;
     var selDays    = (sel && lastUsedMap[sel] !== undefined) ? lastUsedMap[sel] : Infinity;
-    var showWarn   = isOffRot && selDays !== Infinity && selDays < 5;
+    // Warn threshold scales with how often each site naturally comes back up:
+    // 4 sites at 1 dose/day revisits each site every ~4 days — that's correct
+    // use, not a warning. Warn only well inside the expected gap.
+    var warnThresh = 5;
+    if (repertoire) {
+        var dosesPerDay = Math.max(1 / 7, (p.dosesPerWeek || 7) / 7);
+        warnThresh = Math.max(1, Math.min(5, Math.ceil(repertoire.length / dosesPerDay / 2)));
+    }
+    var showWarn   = isOffRot && selDays !== Infinity && selDays < warnThresh;
     logDoseState.isOffRotation = isOffRot;
     logDoseState.showWarning   = showWarn;
 
@@ -1812,9 +1898,9 @@ function renderLogDosePlate() {
     ldRecalcUnits();
 
     // ── Section eyebrow ──
-    var isRec = (sel === recommended);
+    var isRec = !!sel && (sel === recommended);
     var eyebrowLbl = document.getElementById('ld-eyebrow-label');
-    eyebrowLbl.textContent = isRec ? 'Next on rotation' : 'Selected site';
+    eyebrowLbl.textContent = !sel ? 'Choose a site' : (isRec ? 'Suggested site' : 'Selected site');
     eyebrowLbl.classList.toggle('rec', isRec);
 
     // ── Hero plate ──
@@ -1849,23 +1935,35 @@ function renderLogDosePlate() {
     document.getElementById('injection-site').value = sel || '';
 
     // ── Chip grid ──
-    renderLdChipGrid(lastUsedMap, recommended);
+    renderLdChipGrid(lastUsedMap, recommended, repertoire);
 
-    // ── "Or choose another" / "All sites" label ──
+    // ── Grid label ──
     document.getElementById('ld-choose-label').textContent =
-        isOffRot ? 'All sites' : 'Or choose another';
+        repertoire ? 'Your sites' : 'All sites';
 }
 
-function renderLdChipGrid(lastUsedMap, recommended) {
+function renderLdChipGrid(lastUsedMap, recommended, repertoire) {
     var grid = document.getElementById('ld-chip-grid');
     if (!grid) return;
 
-    var sites = LD_CANONICAL_SITES.slice();
-    var chips = logDoseState.isOffRotation
-        ? sites
-        : sites.filter(function(s) { return s !== recommended; }).slice(0, 6);
+    // Repertoire sites up front; everything else behind a "More sites" toggle.
+    // No repertoire yet (cold start) → just show all sites.
+    var primary, extra;
+    if (repertoire) {
+        primary = LD_CANONICAL_SITES.filter(function(s) { return repertoire.indexOf(s) > -1; });
+        extra   = LD_CANONICAL_SITES.filter(function(s) { return repertoire.indexOf(s) === -1; });
+    } else {
+        primary = LD_CANONICAL_SITES.slice();
+        extra   = [];
+    }
+    // Keep a collapsed-away selected site visible
+    var sel = logDoseState.selectedSite;
+    if (sel && !logDoseState.moreSitesOpen && extra.indexOf(sel) > -1) {
+        primary.push(sel);
+        extra = extra.filter(function(s) { return s !== sel; });
+    }
 
-    grid.innerHTML = chips.map(function(site) {
+    function chipHtml(site) {
         var days     = (lastUsedMap[site] === undefined) ? Infinity : lastUsedMap[site];
         var isRec    = (site === recommended);
         var isSelChp = (site === logDoseState.selectedSite);
@@ -1879,7 +1977,21 @@ function renderLdChipGrid(lastUsedMap, recommended) {
                '<span class="ld-chip-label">' + escapeHtml(label) + '</span>' +
                '<span class="ld-chip-last">' + escapeHtml(lastTxt) + '</span>' +
                '</button>';
-    }).join('');
+    }
+
+    var html = primary.map(chipHtml).join('');
+    if (extra.length) {
+        if (logDoseState.moreSitesOpen) html += extra.map(chipHtml).join('');
+        html += '<button type="button" class="ld-chip ld-chip-more" onclick="ldToggleMoreSites()">' +
+                (logDoseState.moreSitesOpen ? '− Fewer sites' : '+ More sites') +
+                '</button>';
+    }
+    grid.innerHTML = html;
+}
+
+function ldToggleMoreSites() {
+    logDoseState.moreSitesOpen = !logDoseState.moreSitesOpen;
+    renderLogDosePlate();
 }
 
 function renderLogDoseEmptyState() {
@@ -1914,6 +2026,9 @@ function selectLogDoseSite(site) {
         sel.addEventListener('change', function() {
             logDoseState.peptideId    = this.value || null;
             logDoseState.selectedSite = null;     // re-pick recommended for new peptide
+            // Dose amounts are peptide-specific — clear so the new peptide's
+            // default fills in instead of silently keeping the old number.
+            document.getElementById('dose-amount').value = '';
             renderLogDosePlate();
         });
     }
@@ -2449,20 +2564,47 @@ document.getElementById('dash-next-month').addEventListener('click', function() 
 document.getElementById('dash-today-btn').addEventListener('click', function() { dashCalDate = new Date(); selectDashDay(localDateStr()); });
 
 // ── SCHEDULING ────────────────────────────────────────────────
+// An explicit schedule always wins. Without one, infer from dosesPerWeek so
+// schedule-less (Quick mode) peptides still show on the dashboard: 7×/wk is
+// daily; fewer means we learn the user's usual weekdays from recent logs.
+function effectiveSchedule(p) {
+    if (p.schedule && p.schedule.mode) return p.schedule;
+    var dpw = p.dosesPerWeek || 0;
+    if (!dpw) return null;
+    if (dpw >= 7) return { mode: 'daily', inferred: true };
+    var doses = (appData.doses || [])
+        .filter(function(d) { return d.peptideId === p.id && d.date; })
+        .sort(function(a, b) { return a.date.localeCompare(b.date); })
+        .slice(-28);
+    if (doses.length >= 3) {
+        var counts = [0,0,0,0,0,0,0];
+        doses.forEach(function(d) { counts[new Date(d.date + 'T00:00:00').getDay()]++; });
+        var days = counts
+            .map(function(c, i) { return { c: c, i: i }; })
+            .filter(function(x) { return x.c > 0; })
+            .sort(function(a, b) { return b.c - a.c; })
+            .slice(0, dpw)
+            .map(function(x) { return x.i; });
+        if (days.length) return { mode: 'specificDays', days: days, inferred: true };
+    }
+    return { mode: 'random', inferred: true };
+}
+
 function isScheduledOn(p, dateStr) {
-    if (!p.schedule || !p.schedule.mode) return false;
+    var sched = effectiveSchedule(p);
+    if (!sched || !sched.mode) return false;
     var d   = new Date(dateStr + 'T00:00:00');
     var dow = d.getDay(); // 0=Sun
-    if (p.schedule.mode === 'daily')  return true;
-    if (p.schedule.mode === 'random') return true;
-    if (p.schedule.mode === 'specificDays') {
-        return Array.isArray(p.schedule.days) && p.schedule.days.indexOf(dow) > -1;
+    if (sched.mode === 'daily')  return true;
+    if (sched.mode === 'random') return true;
+    if (sched.mode === 'specificDays') {
+        return Array.isArray(sched.days) && sched.days.indexOf(dow) > -1;
     }
-    if (p.schedule.mode === 'everyN' && p.schedule.everyN) {
-        var anchor = new Date(p.createdAt || p.schedule.anchorDate || dateStr);
+    if (sched.mode === 'everyN' && sched.everyN) {
+        var anchor = new Date(p.createdAt || sched.anchorDate || dateStr);
         anchor.setHours(0,0,0,0);
         var diff = Math.floor((d - anchor) / 86400000);
-        return diff >= 0 && diff % p.schedule.everyN === 0;
+        return diff >= 0 && diff % sched.everyN === 0;
     }
     return false;
 }
@@ -2471,7 +2613,7 @@ function getScheduleForDay(dateStr) {
     var items = [];
     (appData.peptides || []).forEach(function(p) {
         if (!isScheduledOn(p, dateStr)) return;
-        var sched = p.schedule || {};
+        var sched = effectiveSchedule(p) || {};
         var times = (sched.times && sched.times.length) ? sched.times : (sched.time ? [sched.time] : ['']);
         var dosesForDay = (appData.doses || []).filter(function(d) { return d.peptideId === p.id && d.date === dateStr; });
         times.forEach(function(t, idx) {
@@ -2599,7 +2741,9 @@ function renderTodaySchedule() {
     var todayStr = localDateStr();
     var scheduled = getTodaysSchedule();
     if (!scheduled.length) {
-        container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">No doses scheduled today. Add a schedule via Supply → Edit.</p>';
+        container.innerHTML = (appData.peptides || []).length
+            ? '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">Nothing scheduled today.</p>'
+            : '<p style="color:var(--text-secondary);font-size:0.88rem;padding:8px 0;">No peptides yet — add one in Supply to get started.</p>';
         return;
     }
     container.innerHTML = scheduled.map(function(item) {
@@ -2607,8 +2751,9 @@ function renderTodaySchedule() {
         var du   = dispUnit(p);
         var dAmt = dispAmt(p.dailyDose, p);
         var col  = getPeptideColor(p);
-        var isRandom  = p.schedule && p.schedule.mode === 'random';
-        var times = (p.schedule && p.schedule.times && p.schedule.times.length > 1);
+        var sched = effectiveSchedule(p) || {};
+        var isRandom  = sched.mode === 'random';
+        var times = (sched.times && sched.times.length > 1);
         var timeHint = isRandom ? ' · as needed' : (item.time ? ' · ' + item.time : '');
         var slotLabel = times ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
         var ri = calcReconInfo(p);
@@ -2839,9 +2984,10 @@ function renderDashDayDetail(dateStr) {
             var du   = dispUnit(p);
             var dAmt = dispAmt(p.dailyDose, p);
             var col  = getPeptideColor(p);
-            var isRandom2  = p.schedule && p.schedule.mode === 'random';
+            var sched2     = effectiveSchedule(p) || {};
+            var isRandom2  = sched2.mode === 'random';
             var timeHint = isRandom2 ? ' · as needed' : (item.time ? ' · ' + item.time : '');
-            var multiTimes = p.schedule && p.schedule.times && p.schedule.times.length > 1;
+            var multiTimes = sched2.times && sched2.times.length > 1;
             var slotLabel  = multiTimes ? (item.slotIndex === 0 ? ' (AM)' : item.slotIndex === 1 ? ' (PM)' : ' #' + (item.slotIndex + 1)) : '';
             var ri2 = calcReconInfo(p);
             var unitsHint2 = (ri2 && p.dailyDose) ? '<span style="color:' + col + ';font-weight:700;">' + ri2.units.toFixed(1) + ' units</span> · ' : '';
@@ -2912,10 +3058,7 @@ function renderDashboard() {
 }
 
 function startCycleManual(peptideId) {
-    var todayStr = localDateStr();
-    startCycle(peptideId, todayStr);
-    renderSupply();
-    renderCycles();
+    openStartCycleSheet(peptideId);
 }
 
 // legacy stub — no longer called but left to avoid reference errors
