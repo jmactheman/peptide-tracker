@@ -1500,6 +1500,8 @@ details[open] > .adv-summary::after { transform: rotate(90deg); }
 .cyc-section-hdr { padding: 0 18px 4px; display: flex; align-items: center; gap: 10px; }
 .cyc-section-lbl-active { font-size: 11px; color: #22c55e; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
 .cyc-section-line { flex: 1; height: 1px; background: #262626; }
+.cyc-new-btn { flex-shrink: 0; padding: 6px 12px; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.cyc-new-btn:active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .cyc-cards-list { padding: 10px 18px 0; display: flex; flex-direction: column; gap: 10px; }
 .cyc-completed-list { padding: 10px 18px 0; display: flex; flex-direction: column; gap: 6px; }
 

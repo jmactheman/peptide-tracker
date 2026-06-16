@@ -1280,6 +1280,7 @@ function renderCycles() {
         '<div class="cyc-section-hdr">' +
             '<div class="cyc-section-lbl-active">ACTIVE · ' + active.length + '</div>' +
             '<div class="cyc-section-line"></div>' +
+            '<button class="cyc-new-btn" onclick="openStartCycleSheet()">+ New cycle</button>' +
         '</div>' +
         '<div class="cyc-cards-list">' + activeCards + '</div>' +
         completedSect;

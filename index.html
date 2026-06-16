@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=30">
+    <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
 
@@ -116,8 +116,9 @@
                         <label>Doses per Week</label>
                         <input type="number" id="doses-per-week" min="1" max="14" value="7">
                     </div>
-                    <div class="form-group full-mode-only">
+                    <div class="form-group">
                         <label>Cycle Duration (weeks)</label>
+                        <p class="form-hint">Optional — set this to track a cycle. Leave blank for none.</p>
                         <input type="number" id="cycle-duration" min="1" max="52" placeholder="e.g. 12">
                     </div>
                     <div class="form-group full-mode-only">
@@ -524,7 +525,7 @@
                     <button type="button" class="calc-link" id="edit-dose-calc-link" style="display:none;" onclick="openUnitCalc('edit-dose','edit-quick-dose-unit')">🧮 What's this in units?</button>
                 </div>
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
-                <div class="form-group edit-full-only"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52"></div>
+                <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52" placeholder="Optional — blank for no cycle"></div>
                 <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
                 <div class="form-group" id="edit-display-unit-group" style="display:none;">
                     <label>Show Doses As</label>
@@ -727,12 +728,12 @@
     </div>
 </div>
 
-<script src="data.js?v=30"></script>
-<script src="db.js?v=30"></script>
-<script src="app.js?v=30"></script>
+<script src="data.js?v=31"></script>
+<script src="db.js?v=31"></script>
+<script src="app.js?v=31"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=30"></script>
-<script src="sync.js?v=30"></script>
+<script src="auth.js?v=31"></script>
+<script src="sync.js?v=31"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});
