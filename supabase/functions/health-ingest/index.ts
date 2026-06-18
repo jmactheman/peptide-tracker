@@ -12,9 +12,9 @@
 // Secrets: supabase secrets set HEALTH_INGEST_SECRET=... HEALTH_INGEST_USER_ID=...
 //   (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the platform.)
 
-// Note: createClient is imported dynamically inside the handler (not a static
-// top-level import) so this module can also be imported by a plain-Node test
-// harness to exercise reshape() without pulling in esm.sh or the Deno runtime.
+// Note: the DB write goes straight to PostgREST with fetch (no supabase-js / no
+// esm.sh import) — nothing to fetch on cold start, and this module stays
+// importable by a plain-Node test harness to exercise reshape().
 
 const env = (k: string): string => (globalThis as any).Deno?.env?.get(k) ?? '';
 const SECRET  = env('HEALTH_INGEST_SECRET');
@@ -120,14 +120,28 @@ async function handler(req: Request): Promise<Response> {
   const rows = reshape(body, USER_ID);
   if (!rows.length) return json({ ok: true, upserted: 0 });
 
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-  const sb = createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
-  // Stamp updated_at so the row reflects this ingest; upsert on the PK (user_id,id).
-  const stamped = rows.map(r => ({ ...r, updated_at: new Date().toISOString() }));
-  const { error } = await sb.from('health').upsert(stamped, { onConflict: 'user_id,id' });
-  if (error) return json({ ok: false, error: error.message }, 500);
+  // Dedupe by id: a single upsert statement can't touch the same (user_id,id)
+  // row twice, and a payload can carry repeats. Last write wins. Stamp updated_at.
+  const uniq = new Map<string, any>();
+  const now = new Date().toISOString();
+  for (const r of rows) uniq.set(r.id, { ...r, updated_at: now });
+  const stamped = [...uniq.values()];
 
-  return json({ ok: true, upserted: rows.length });
+  // Upsert straight to PostgREST (no esm.sh import). Chunk so each request stays
+  // small even on a big first backfill.
+  const endpoint = `${SB_URL}/rest/v1/health?on_conflict=user_id,id`;
+  const headers = {
+    apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`,
+    'content-type': 'application/json',
+    Prefer: 'resolution=merge-duplicates,return=minimal',
+  };
+  for (let i = 0; i < stamped.length; i += 500) {
+    const chunk = stamped.slice(i, i + 500);
+    const res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(chunk) });
+    if (!res.ok) return json({ ok: false, error: `upsert ${res.status}: ${await res.text()}` }, 500);
+  }
+
+  return json({ ok: true, upserted: stamped.length });
 }
 
 // Only start the HTTP server under Deno (the platform runtime); stay inert when
