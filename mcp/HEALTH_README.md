@@ -78,11 +78,13 @@ Install **"Health Auto Export – JSON+CSV"** (Lyfeware) and create an **Automat
 - **Type:** REST API  ·  **Format:** JSON
 - **URL (secret included):**
   `https://mxcpjsdvdqhgutdzzggo.supabase.co/functions/v1/health-ingest?key=<HEALTH_INGEST_SECRET>`
-- **Aggregation:** **per day**, and crucially the **method must fit the metric** —
-  **Sum** for cumulative metrics (Step Count, Active Energy), **Average** for rate/level
-  metrics (Heart Rate, Resting HR, HRV, Weight). Averaging steps yields a tiny fractional
-  value, not the daily total. The function keeps ONE value per metric per day, so the
-  aggregation has to be correct on the phone side.
+- **Aggregation:** turn it **OFF** — send raw/all data points. The function aggregates
+  per metric per day itself: **sums** cumulative quantities (steps, energy, distance,
+  exercise/stand/daylight time) and **averages** rates/levels (heart rate, HRV, weight,
+  SpO2). This is deliberate: the export app applies one method to every metric, which
+  averages steps down to a meaningless fraction. Doing it server-side keeps each metric
+  correct. (If you leave aggregation on, sum/avg of the single daily value is just that
+  value — so cumulative metrics would still be wrong; keep it off.)
 - **Schedule:** daily (e.g. 06:00). Enable background delivery.
 - **First run:** keep the date range to ~1 day to confirm it lands fast, then widen the
   backfill — a full-history export of every metric can be large enough to time out

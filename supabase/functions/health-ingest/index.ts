@@ -47,7 +47,23 @@ export function reshape(body: any, userId: string) {
   const add = (id: string, data: Record<string, unknown>) =>
     rows.push({ user_id: userId, id, data, deleted: false });
 
-  // ── metrics: one row per metric per day. Sleep is split out into its own kind. ─
+  // ── metrics & sleep ───────────────────────────────────────────────────────────
+  // Samples can arrive as many raw points per day (aggregation OFF in the export
+  // app). Aggregate per metric per day HERE so correctness doesn't depend on the
+  // phone choosing the right function: SUM cumulative quantities (steps, energy,
+  // distance, time-based totals), AVERAGE everything else (rates/levels like heart
+  // rate, weight, SpO2). If the app already sent one value per day, sum/avg of a
+  // single point is that point — so this is also correct for pre-aggregated input.
+  const CUMULATIVE = new Set([
+    'step_count', 'active_energy', 'basal_energy_burned', 'apple_exercise_time',
+    'apple_stand_time', 'apple_stand_hour', 'flights_climbed', 'time_in_daylight',
+    'walking_running_distance', 'distance_walking_running', 'distance_cycling',
+    'distance_swimming', 'swimming_stroke_count', 'dietary_energy', 'dietary_water',
+  ]);
+  const macc = new Map<string, any>();   // `${name}|${date}` → {_sum,_n,...}
+  const sacc = new Map<string, any>();   // date → sleep accumulator
+  const addDur = (a: any, k: string, v: number | null) => { if (v != null) a[k] = (a[k] ?? 0) + v; };
+
   for (const metric of (root.metrics ?? []) as any[]) {
     const name: string = String(metric?.name ?? '').trim();
     const units = metric?.units ?? null;
@@ -58,24 +74,42 @@ export function reshape(body: any, userId: string) {
       if (!date) continue;
 
       if (/sleep/i.test(name)) {
-        // Sleep carries stage fields rather than a single qty.
-        add(`sleep:${date}`, {
-          kind: 'sleep', date,
-          inBed: num(pick(pt, 'inBed', 'inBedDuration', 'inbed')),
-          asleep: num(pick(pt, 'asleep', 'totalSleep', 'asleepDuration', 'sleepDuration')),
-          core: num(pick(pt, 'core', 'lightSleep')),
-          deep: num(pick(pt, 'deep', 'deepSleep')),
-          rem: num(pick(pt, 'rem', 'remSleep')),
-          awake: num(pick(pt, 'awake', 'awakeDuration')),
-          sleepStart: pick(pt, 'sleepStart', 'startDate', 'inBedStart') ?? null,
-          sleepEnd: pick(pt, 'sleepEnd', 'endDate', 'inBedEnd') ?? null,
-          units, source: pick(pt, 'source') ?? null,
-        });
+        // Sleep carries stage durations; sum them across the night's segments.
+        const a = sacc.get(date) ?? { date, units, source: pick(pt, 'source') ?? null };
+        addDur(a, 'inBed', num(pick(pt, 'inBed', 'inBedDuration', 'inbed')));
+        addDur(a, 'asleep', num(pick(pt, 'asleep', 'totalSleep', 'asleepDuration', 'sleepDuration')));
+        addDur(a, 'core', num(pick(pt, 'core', 'lightSleep')));
+        addDur(a, 'deep', num(pick(pt, 'deep', 'deepSleep')));
+        addDur(a, 'rem', num(pick(pt, 'rem', 'remSleep')));
+        addDur(a, 'awake', num(pick(pt, 'awake', 'awakeDuration')));
+        const s = pick(pt, 'sleepStart', 'startDate', 'inBedStart');
+        const e = pick(pt, 'sleepEnd', 'endDate', 'inBedEnd');
+        if (s && (!a.sleepStart || String(s) < a.sleepStart)) a.sleepStart = String(s);
+        if (e && (!a.sleepEnd || String(e) > a.sleepEnd)) a.sleepEnd = String(e);
+        sacc.set(date, a);
       } else {
         const qty = num(pick(pt, 'qty', 'Avg', 'avg', 'value'));
-        add(`${name}:${date}`, { kind: 'metric', metric: name, date, qty, units, source: pick(pt, 'source') ?? null });
+        if (qty == null) continue;
+        const key = `${name}|${date}`;
+        const a = macc.get(key) ?? { metric: name, date, units, source: pick(pt, 'source') ?? null, _sum: 0, _n: 0 };
+        a._sum += qty; a._n += 1;
+        macc.set(key, a);
       }
     }
+  }
+
+  for (const a of macc.values()) {
+    const qty = CUMULATIVE.has(a.metric) ? a._sum : a._sum / a._n;
+    add(`${a.metric}:${a.date}`, { kind: 'metric', metric: a.metric, date: a.date, qty, units: a.units, source: a.source });
+  }
+  for (const a of sacc.values()) {
+    add(`sleep:${a.date}`, {
+      kind: 'sleep', date: a.date,
+      inBed: a.inBed ?? null, asleep: a.asleep ?? null,
+      core: a.core ?? null, deep: a.deep ?? null, rem: a.rem ?? null, awake: a.awake ?? null,
+      sleepStart: a.sleepStart ?? null, sleepEnd: a.sleepEnd ?? null,
+      units: a.units, source: a.source,
+    });
   }
 
   // ── workouts: physiological record (HR, calories, duration). Kept in full —
