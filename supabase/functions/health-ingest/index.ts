@@ -38,6 +38,23 @@ const pick = (o: Record<string, unknown>, ...keys: string[]) => {
   for (const k of keys) if (o[k] != null) return o[k];
   return null;
 };
+// A night's sleep crosses midnight; attribute the whole session to the wake-up
+// day. Segments starting in the evening (>= 18:00 local) roll to the next day, so
+// "23:15 on the 16th" and "02:00 on the 17th" both land on the 17th.
+const sleepDayOf = (startStr: unknown): string | null => {
+  const m = String(startStr ?? '').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):/);
+  if (!m) return null;
+  const [, y, mo, d, hh] = m;
+  if (Number(hh) < 18) return `${y}-${mo}-${d}`;
+  const dt = new Date(`${y}-${mo}-${d}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+};
+// HealthKit sleep stage (HAE `value`) → our bucket. Asleep = core+deep+rem+unspecified.
+const SLEEP_STAGE: Record<string, string> = {
+  core: 'core', deep: 'deep', rem: 'rem', awake: 'awake',
+  asleep: 'asleepUnspec', asleepunspecified: 'asleepUnspec', inbed: 'inBedOnly',
+};
 
 // Pure transform: Health Auto Export payload → health-table rows. Exported so a
 // Node test harness can verify the reshaping without Supabase or Deno.
@@ -61,40 +78,42 @@ export function reshape(body: any, userId: string) {
     'distance_swimming', 'swimming_stroke_count', 'dietary_energy', 'dietary_water',
   ]);
   const macc = new Map<string, any>();   // `${name}|${date}` → {_sum,_n,...}
-  const sacc = new Map<string, any>();   // date → sleep accumulator
-  const addDur = (a: any, k: string, v: number | null) => { if (v != null) a[k] = (a[k] ?? 0) + v; };
+  const sacc = new Map<string, any>();   // wake-day → sleep stage accumulator
 
   for (const metric of (root.metrics ?? []) as any[]) {
     const name: string = String(metric?.name ?? '').trim();
     const units = metric?.units ?? null;
     if (!name) continue;
 
+    // sleep_analysis ONLY — match exactly so "apple_sleeping_wrist_temperature"
+    // (and any other *sleep* name) is treated as a normal metric, not a sleep record.
+    if (name === 'sleep_analysis') {
+      for (const pt of (metric?.data ?? []) as any[]) {
+        const day = sleepDayOf(pick(pt, 'start', 'startDate', 'date'));
+        if (!day) continue;
+        // qty is the segment duration in hours (units 'hr'); `value` is the stage.
+        const dur = num(pick(pt, 'qty', 'value'));
+        const stage = String(pick(pt, 'value', 'stage') ?? '').toLowerCase().replace(/[^a-z]/g, '');
+        const a = sacc.get(day) ?? { core: 0, deep: 0, rem: 0, awake: 0, asleepUnspec: 0, inBedOnly: 0, source: pick(pt, 'source') ?? null };
+        const bucket = SLEEP_STAGE[stage];
+        if (bucket && dur != null) a[bucket] += dur;
+        const s = pick(pt, 'start', 'startDate'), e = pick(pt, 'end', 'endDate');
+        if (s && (!a.sleepStart || String(s) < a.sleepStart)) a.sleepStart = String(s);
+        if (e && (!a.sleepEnd || String(e) > a.sleepEnd)) a.sleepEnd = String(e);
+        sacc.set(day, a);
+      }
+      continue;
+    }
+
     for (const pt of (metric?.data ?? []) as any[]) {
       const date = dayOf(pt?.date);
       if (!date) continue;
-
-      if (/sleep/i.test(name)) {
-        // Sleep carries stage durations; sum them across the night's segments.
-        const a = sacc.get(date) ?? { date, units, source: pick(pt, 'source') ?? null };
-        addDur(a, 'inBed', num(pick(pt, 'inBed', 'inBedDuration', 'inbed')));
-        addDur(a, 'asleep', num(pick(pt, 'asleep', 'totalSleep', 'asleepDuration', 'sleepDuration')));
-        addDur(a, 'core', num(pick(pt, 'core', 'lightSleep')));
-        addDur(a, 'deep', num(pick(pt, 'deep', 'deepSleep')));
-        addDur(a, 'rem', num(pick(pt, 'rem', 'remSleep')));
-        addDur(a, 'awake', num(pick(pt, 'awake', 'awakeDuration')));
-        const s = pick(pt, 'sleepStart', 'startDate', 'inBedStart');
-        const e = pick(pt, 'sleepEnd', 'endDate', 'inBedEnd');
-        if (s && (!a.sleepStart || String(s) < a.sleepStart)) a.sleepStart = String(s);
-        if (e && (!a.sleepEnd || String(e) > a.sleepEnd)) a.sleepEnd = String(e);
-        sacc.set(date, a);
-      } else {
-        const qty = num(pick(pt, 'qty', 'Avg', 'avg', 'value'));
-        if (qty == null) continue;
-        const key = `${name}|${date}`;
-        const a = macc.get(key) ?? { metric: name, date, units, source: pick(pt, 'source') ?? null, _sum: 0, _n: 0 };
-        a._sum += qty; a._n += 1;
-        macc.set(key, a);
-      }
+      const qty = num(pick(pt, 'qty', 'Avg', 'avg', 'value'));
+      if (qty == null) continue;
+      const key = `${name}|${date}`;
+      const a = macc.get(key) ?? { metric: name, date, units, source: pick(pt, 'source') ?? null, _sum: 0, _n: 0 };
+      a._sum += qty; a._n += 1;
+      macc.set(key, a);
     }
   }
 
@@ -102,13 +121,14 @@ export function reshape(body: any, userId: string) {
     const qty = CUMULATIVE.has(a.metric) ? a._sum : a._sum / a._n;
     add(`${a.metric}:${a.date}`, { kind: 'metric', metric: a.metric, date: a.date, qty, units: a.units, source: a.source });
   }
-  for (const a of sacc.values()) {
-    add(`sleep:${a.date}`, {
-      kind: 'sleep', date: a.date,
-      inBed: a.inBed ?? null, asleep: a.asleep ?? null,
-      core: a.core ?? null, deep: a.deep ?? null, rem: a.rem ?? null, awake: a.awake ?? null,
+  for (const [day, a] of sacc) {
+    const asleep = a.core + a.deep + a.rem + a.asleepUnspec;
+    const inBed = asleep + a.awake + a.inBedOnly;
+    add(`sleep:${day}`, {
+      kind: 'sleep', date: day,
+      inBed, asleep, core: a.core, deep: a.deep, rem: a.rem, awake: a.awake,
       sleepStart: a.sleepStart ?? null, sleepEnd: a.sleepEnd ?? null,
-      units: a.units, source: a.source,
+      units: 'hr', source: a.source,
     });
   }
 
