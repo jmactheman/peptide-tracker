@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "MCP server exposing one user's PepBros peptide data (from Supabase) to an AI health agent",
   "type": "module",
-  "bin": { "pepbros-mcp": "server.js" },
-  "scripts": { "start": "node server.js" },
+  "bin": { "pepbros-mcp": "server.js", "health-mcp": "health-server.js" },
+  "scripts": { "start": "node server.js", "start:health": "node health-server.js" },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
     "zod": "^3.23.8"
