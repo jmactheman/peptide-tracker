@@ -1,0 +1,4 @@
+# PepBros MCP server
+mcp/node_modules/
+mcp/.env
+.DS_Store
