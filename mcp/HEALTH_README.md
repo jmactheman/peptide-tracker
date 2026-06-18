@@ -60,20 +60,33 @@ Get your `user_id` from Supabase → **Authentication → Users** (your `jsmc88@
 row), or it's whatever the PepBros server resolved. The function URL is:
 `https://mxcpjsdvdqhgutdzzggo.supabase.co/functions/v1/health-ingest`
 
-Smoke-test it:
+The secret is passed in the **URL** as `?key=…`, NOT a header — Health Auto Export
+does not reliably attach custom headers (the function also accepts `Authorization:
+Bearer` or an `x-api-key` header if some other client can send them).
+
+Smoke-test it (secret in the query string):
 ```bash
-curl -X POST https://mxcpjsdvdqhgutdzzggo.supabase.co/functions/v1/health-ingest \
-  -H "Authorization: Bearer <HEALTH_INGEST_SECRET>" -H "content-type: application/json" \
+SECRET=<HEALTH_INGEST_SECRET>
+curl -X POST "https://mxcpjsdvdqhgutdzzggo.supabase.co/functions/v1/health-ingest?key=$SECRET" \
+  -H "content-type: application/json" \
   -d '{"data":{"metrics":[{"name":"step_count","units":"count","data":[{"date":"2026-06-17 00:00:00 -0500","qty":8123}]}]}}'
 # → {"ok":true,"upserted":1}
 ```
 
 ### 3. Configure Health Auto Export on the iPhone
 Install **"Health Auto Export – JSON+CSV"** (Lyfeware) and create an **Automation**:
-- **Type:** REST API  ·  **Format:** JSON  ·  **Aggregate:** per day
-- **URL:** the function URL above
-- **Headers:** `Authorization: Bearer <HEALTH_INGEST_SECRET>`
+- **Type:** REST API  ·  **Format:** JSON
+- **URL (secret included):**
+  `https://mxcpjsdvdqhgutdzzggo.supabase.co/functions/v1/health-ingest?key=<HEALTH_INGEST_SECRET>`
+- **Aggregation:** **per day**, and crucially the **method must fit the metric** —
+  **Sum** for cumulative metrics (Step Count, Active Energy), **Average** for rate/level
+  metrics (Heart Rate, Resting HR, HRV, Weight). Averaging steps yields a tiny fractional
+  value, not the daily total. The function keeps ONE value per metric per day, so the
+  aggregation has to be correct on the phone side.
 - **Schedule:** daily (e.g. 06:00). Enable background delivery.
+- **First run:** keep the date range to ~1 day to confirm it lands fast, then widen the
+  backfill — a full-history export of every metric can be large enough to time out
+  (`NSURLError -1001`) on the phone before the upload finishes.
 - **Metrics to enable:**
   - *Core daily:* Step Count, Active Energy, Resting Heart Rate, Weight & Body Fat %
   - *Sleep:* Sleep Analysis
@@ -83,7 +96,8 @@ Install **"Health Auto Export – JSON+CSV"** (Lyfeware) and create an **Automat
 > Automated REST export needs the app's paid tier (~a few $/mo). Metric names in
 > the payload (e.g. `step_count`, `heart_rate_variability`, `body_mass`) are what
 > `get_metric_history` expects — `list_available_metrics` shows the exact strings
-> once data lands.
+> once data lands. A secret in the URL can appear in server logs — rotate it
+> (`supabase secrets set HEALTH_INGEST_SECRET=…` + update the phone URL) if that matters.
 
 ### 4. Register the MCP server with Claude Desktop
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` under

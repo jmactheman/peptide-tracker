@@ -109,8 +109,15 @@ async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return new Response('POST only', { status: 405 });
 
   // ── auth: shared secret ──────────────────────────────────────────────────────
+  // Accept the secret from any of: Authorization: Bearer, a custom api-key header,
+  // or a ?key= / ?secret= query param. The query param is the most portable —
+  // some export apps don't reliably attach custom headers.
+  const url = new URL(req.url);
   const auth = req.headers.get('authorization') ?? '';
-  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  const headerToken = auth.replace(/^Bearer\s+/i, '').trim();
+  const altHeader = (req.headers.get('x-api-key') || req.headers.get('x-health-key') || '').trim();
+  const qpKey = (url.searchParams.get('key') || url.searchParams.get('secret') || '').trim();
+  const token = headerToken || altHeader || qpKey;
   if (!SECRET || token !== SECRET) return new Response('unauthorized', { status: 401 });
   if (!USER_ID) return new Response('server not configured (HEALTH_INGEST_USER_ID)', { status: 500 });
 
