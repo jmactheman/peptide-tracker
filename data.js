@@ -33,6 +33,32 @@ var PEPTIDE_COLORS = [
     '#78716c','#0d9488'
 ];
 
+// Peptide classes — used for washout gating between same-class compounds.
+// Only classes where back-to-back use warrants a washout are mapped; anything
+// not listed is unclassed and never triggers a washout warning.
+var PEPTIDE_CLASS = {
+    // GHRH analogs (growth-hormone secretagogues — receptor resensitization)
+    'Sermorelin':'ghrh','CJC-1295 (no DAC)':'ghrh','CJC-1295 with DAC':'ghrh',
+    'CJC-1295 + Ipamorelin Blend':'ghrh','Tesamorelin':'ghrh',
+    // Growth-hormone releasing peptides / ghrelin-receptor agonists
+    'Ipamorelin':'ghrp','GHRP-2':'ghrp','GHRP-6':'ghrp','Hexarelin':'ghrp',
+    // GLP-1 / incretin agonists
+    'Semaglutide':'glp1','Tirzepatide':'glp1','Retatrutide':'glp1','Cagrilintide':'glp1',
+    'Mazdutide':'glp1','Survodutide':'glp1',
+    // Melanocortin agonists
+    'Melanotan I':'melanocortin','Melanotan II':'melanocortin','PT-141':'melanocortin'
+};
+
+// Human-readable label per class (shown in washout prompts/warnings).
+var CLASS_LABELS = {
+    ghrh:'GHRH (GH secretagogue)', ghrp:'GHRP / ghrelin',
+    glp1:'GLP-1', melanocortin:'melanocortin'
+};
+
+// Suggested washout (weeks) per class, used to prefill the end-cycle prompt.
+var CLASS_WASHOUT_WEEKS = { ghrh:4, ghrp:4, glp1:4, melanocortin:4 };
+var DEFAULT_WASHOUT_WEEKS = 4;
+
 var INJECTION_SITES = [
     'Abdomen - Left','Abdomen - Right',
     'Thigh - Left','Thigh - Right',

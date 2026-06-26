@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" sizes="1024x1024" href="icon.png">
     <link rel="manifest" href="manifest.json">
     <title>PepBros Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=31">
+    <link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
 
@@ -120,6 +120,11 @@
                         <label>Cycle Duration (weeks)</label>
                         <p class="form-hint">Optional — set this to track a cycle. Leave blank for none.</p>
                         <input type="number" id="cycle-duration" min="1" max="52" placeholder="e.g. 12">
+                    </div>
+                    <div class="form-group">
+                        <label>Washout (weeks)</label>
+                        <p class="form-hint">Rest after a cycle before the next same-class peptide. Blank = 4 wk default.</p>
+                        <input type="number" id="washout-duration" min="0" max="52" placeholder="e.g. 4">
                     </div>
                     <div class="form-group full-mode-only">
                         <label>Reorder at (vials)</label>
@@ -526,6 +531,7 @@
                 </div>
                 <div class="form-group"><label>Doses per Week</label><input type="number" id="edit-dpw" min="1" max="14"></div>
                 <div class="form-group"><label>Cycle Duration (weeks)</label><input type="number" id="edit-cycle-dur" min="1" max="52" placeholder="Optional — blank for no cycle"></div>
+                <div class="form-group"><label>Washout (weeks)</label><input type="number" id="edit-washout-dur" min="0" max="52" placeholder="Blank = 4 wk default"></div>
                 <div class="form-group edit-full-only"><label>Reorder at (vials)</label><input type="number" id="edit-reorder" min="0"></div>
                 <div class="form-group" id="edit-display-unit-group" style="display:none;">
                     <label>Show Doses As</label>
@@ -584,6 +590,22 @@
         <div class="modal-actions">
             <button type="button" class="btn-ghost btn-small" onclick="closeModal('cycle-modal')">Close</button>
             <button type="button" class="btn-danger btn-small" id="cycle-end-btn" style="display:none;">End Cycle</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="washout-modal">
+    <div class="modal">
+        <h2>🏁 End Cycle</h2>
+        <p class="auth-sub" id="washout-modal-sub" style="margin-bottom:14px;"></p>
+        <div class="form-group">
+            <label>Washout (weeks)</label>
+            <input type="number" id="washout-weeks" min="0" max="52" step="1">
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost btn-small" onclick="closeModal('washout-modal')">Cancel</button>
+            <button type="button" class="btn-ghost btn-small" id="washout-skip-btn">End, no washout</button>
+            <button type="button" class="btn-success btn-small" id="washout-confirm-btn">End + washout</button>
         </div>
     </div>
 </div>
@@ -728,12 +750,12 @@
     </div>
 </div>
 
-<script src="data.js?v=31"></script>
-<script src="db.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="data.js?v=32"></script>
+<script src="db.js?v=32"></script>
+<script src="app.js?v=32"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=31"></script>
-<script src="sync.js?v=31"></script>
+<script src="auth.js?v=32"></script>
+<script src="sync.js?v=32"></script>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/peptide-tracker/sw.js').catch(function() {});

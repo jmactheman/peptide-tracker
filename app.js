@@ -560,6 +560,7 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
         trackingMode:    document.getElementById('peptide-tracking-mode').value || 'simple',
         dosesPerWeek:    parseInt(document.getElementById('doses-per-week').value) || 7,
         cycleDuration:   parseInt(document.getElementById('cycle-duration').value) || 0,
+        washoutDuration: parseInt(document.getElementById('washout-duration').value) || 0,
         reorderThreshold:parseInt(document.getElementById('reorder-threshold').value) || 5,
         color: selectedColor, reconstituted: null, createdAt: new Date().toISOString(),
         schedule: readScheduleUI('supply-sched-container')
@@ -587,6 +588,7 @@ document.getElementById('peptide-form').addEventListener('submit', async functio
     document.getElementById('kits-on-hand').value = 1;
     document.getElementById('daily-dose').value   = '';
     document.getElementById('cycle-duration').value = '';
+    document.getElementById('washout-duration').value = '';
     document.getElementById('doses-per-week').value  = 7;
     document.getElementById('reorder-threshold').value = 5;
     document.getElementById('dose-label').textContent     = 'My Dose';
@@ -804,6 +806,7 @@ function openEdit(id) {
     document.getElementById('edit-dose').value            = dispAmt(p.dailyDose, p);
     document.getElementById('edit-dpw').value             = p.dosesPerWeek;
     document.getElementById('edit-cycle-dur').value       = p.cycleDuration || '';
+    document.getElementById('edit-washout-dur').value     = p.washoutDuration || '';
     document.getElementById('edit-reorder').value         = p.reorderThreshold || 5;
     document.getElementById('edit-display-unit').value    = (p.displayUnit === 'mg') ? 'mg' : 'mcg';
     document.getElementById('edit-quick-dose-unit').value = peptideToQuickDoseUnit(p);
@@ -850,6 +853,7 @@ document.getElementById('edit-form').addEventListener('submit', async function(e
     p.trackingMode     = document.getElementById('edit-tracking-mode').value || 'simple';
     p.dosesPerWeek     = parseInt(document.getElementById('edit-dpw').value) || 7;
     p.cycleDuration    = parseInt(document.getElementById('edit-cycle-dur').value) || 0;
+    p.washoutDuration  = parseInt(document.getElementById('edit-washout-dur').value) || 0;
     p.reorderThreshold = parseInt(document.getElementById('edit-reorder').value) || 5;
     p.color            = editSelectedColor;
     p.schedule         = readScheduleUI('edit-sched-container');
@@ -883,6 +887,53 @@ async function deletePeptide(id) {
     checkLowStockNotification();
 }
 
+// ── WASHOUT helpers ───────────────────────────────────────────
+function peptideClassFromName(name) {
+    return (typeof PEPTIDE_CLASS !== 'undefined' && PEPTIDE_CLASS[name]) || null;
+}
+function classLabel(cls) {
+    return (cls && typeof CLASS_LABELS !== 'undefined' && CLASS_LABELS[cls]) || cls || '';
+}
+// Suggested washout length (weeks) when completing a cycle: the peptide's own
+// override if set, else its class default, else the global default.
+function suggestedWashoutWeeks(p) {
+    if (p && p.washoutDuration) return p.washoutDuration;
+    var cls = p ? peptideClassFromName(p.name) : null;
+    var byClass = (cls && typeof CLASS_WASHOUT_WEEKS !== 'undefined') ? CLASS_WASHOUT_WEEKS[cls] : 0;
+    return byClass || (typeof DEFAULT_WASHOUT_WEEKS !== 'undefined' ? DEFAULT_WASHOUT_WEEKS : 4);
+}
+function washoutDaysLeft(c) {
+    if (!c || !c.washoutEndDate) return 0;
+    var today = new Date(); today.setHours(0,0,0,0);
+    var end = new Date(c.washoutEndDate + 'T00:00:00');
+    return Math.max(0, Math.ceil((end - today) / 86400000));
+}
+function washoutEndStr(c) {
+    return new Date(c.washoutEndDate + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+function washoutIsActive(c) {
+    return !!(c && c.washoutEndDate && localDateStr() < c.washoutEndDate);
+}
+// Most-recent active washout for a given class (across completed cycles), or null.
+// Keyed off the cycle's stored peptideName so it survives peptide deletion.
+function activeWashoutForClass(cls) {
+    if (!cls) return null;
+    var hits = (appData.cycles || []).filter(function(c) {
+        return c.status === 'completed' && washoutIsActive(c) &&
+               peptideClassFromName(c.peptideName) === cls;
+    });
+    hits.sort(function(a, b) { return (b.washoutEndDate || '').localeCompare(a.washoutEndDate || ''); });
+    return hits[0] || null;
+}
+// Wrap-up nudge state for an active cycle that has passed its planned end.
+// Fires the prominent nudge exactly once (stamps endNudged), then goes passive.
+function washoutNudgeState(c) {
+    if (!c || c.status !== 'active' || !c.plannedEndDate) return 'none';
+    if (localDateStr() < c.plannedEndDate) return 'none';
+    if (!c.endNudged) { c.endNudged = true; dbPut('cycles', c); return 'prominent'; }
+    return 'passive';
+}
+
 // ── CYCLES ────────────────────────────────────────────────────
 function startCycle(peptideId, date, durationWeeks) {
     if (!appData.cycles) appData.cycles = [];
@@ -905,17 +956,42 @@ function startCycle(peptideId, date, durationWeeks) {
     return cycle;
 }
 
-async function endCycle(cycleId) {
+async function endCycle(cycleId, washoutWeeks) {
     var cycle = (appData.cycles || []).find(function(c) { return c.id === cycleId; });
     if (!cycle) return;
     cycle.status  = 'completed';
     cycle.endDate = localDateStr();
+    if (washoutWeeks && washoutWeeks > 0) {
+        cycle.washoutWeeks = washoutWeeks;
+        var we = new Date(cycle.endDate + 'T00:00:00');
+        we.setDate(we.getDate() + washoutWeeks * 7);
+        cycle.washoutEndDate = localDateStr(we);
+    }
     // Note: vials are already decremented per-dose via reconstituted.remainingUnits / finishVial.
     // Do NOT double-decrement here.
     try { await dbPut('cycles', cycle); } catch(err) { alert('Save failed: ' + err.message); return; }
     renderSupply();
     renderCycles();
     closeModal('cycle-modal');
+    closeModal('washout-modal');
+}
+
+// End-cycle prompt: confirm completion + offer a washout timer (prefilled,
+// overridable, skippable). The single funnel for both manual and lapsed ends.
+var _washoutCycleId = null;
+function promptEndCycle(cycleId) {
+    var c = (appData.cycles || []).find(function(x) { return x.id === cycleId; });
+    if (!c) return;
+    var p = appData.peptides.find(function(x) { return x.id === c.peptideId; });
+    var cls = peptideClassFromName(c.peptideName);
+    _washoutCycleId = cycleId;
+    var sub = 'Completing ' + escapeHtml(c.peptideName) + '.';
+    sub += cls
+        ? ' Set a washout before your next ' + escapeHtml(classLabel(cls)) + ' peptide.'
+        : ' Optionally set a washout before your next cycle.';
+    document.getElementById('washout-modal-sub').innerHTML = sub;
+    document.getElementById('washout-weeks').value = suggestedWashoutWeeks(p);
+    document.getElementById('washout-modal').classList.add('active');
 }
 
 function getCycleDoses(cycleId) {
@@ -1103,6 +1179,22 @@ function renderHeroCard(c, p) {
     var nextLabel = cycleNextDoseLabel(p);
     var nextColor = nextLabel === 'Today' ? color : '#ffffff';
 
+    // Wrap-up nudge: cycle has passed its planned end. Prominent once, then passive.
+    var nudge = washoutNudgeState(c);
+    var pastEnd = nudge !== 'none';
+    var nudgeHtml = nudge === 'prominent'
+        ? '<div class="cyc-end-nudge" onclick="event.stopPropagation();promptEndCycle(\'' + c.id + '\')">' +
+              '<div class="cyc-done-icon">✓</div>' +
+              '<span style="flex:1;line-height:1.3;">Cycle complete — wrap it up?' +
+                  '<div style="font-size:10.5px;font-weight:500;margin-top:1px;opacity:0.85;">Tap to end &amp; set washout</div>' +
+              '</span>' +
+              '<span style="font-size:18px;opacity:0.7;">›</span>' +
+          '</div>'
+        : '';
+    var dlLineHtml = pastEnd
+        ? '<span style="color:#a78bfa;">ran over · planned end ' + cycleEndDateStr(c) + '</span>'
+        : (dl + 'd left · ends ' + cycleEndDateStr(c));
+
     return '<div class="cyc-hero-card" onclick="showCycleDetail(\'' + c.id + '\')">' +
         '<div class="cyc-hero-stripe" style="background:' + color + ';"></div>' +
         '<div class="cyc-hero-top">' +
@@ -1110,10 +1202,11 @@ function renderHeroCard(c, p) {
             '<div style="flex:1;min-width:0;">' +
                 '<div style="font-size:16px;font-weight:700;letter-spacing:-0.01em;line-height:1.15;">' + escapeHtml(c.peptideName) + '</div>' +
                 '<div style="font-size:11.5px;color:#a1a1aa;margin-top:4px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.02em;">' + doseStr + ' · ' + dpw + '× / wk</div>' +
-                '<div style="font-size:11px;color:' + dlColor + ';margin-top:3px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">' + dl + 'd left · ends ' + cycleEndDateStr(c) + '</div>' +
+                '<div style="font-size:11px;color:' + dlColor + ';margin-top:3px;font-family:\'SF Mono\',ui-monospace,monospace;letter-spacing:0.04em;">' + dlLineHtml + '</div>' +
             '</div>' +
             '<button class="cyc-chevron-btn" onclick="event.stopPropagation();showCycleDetail(\'' + c.id + '\')">›</button>' +
         '</div>' +
+        nudgeHtml +
         (simple ? '' :
         '<div style="margin-top:14px;">' +
             '<div class="cyc-gauge-track">' +
@@ -1162,6 +1255,9 @@ function renderCompletedRow(c) {
                 '<div style="flex:1;height:2px;background:' + color + ';opacity:0.4;border-radius:1px;"></div>' +
                 '<div class="cyc-mono" style="font-size:10px;color:#71717a;letter-spacing:0.04em;">' + cycleStartDateStr(c) + ' → ' + endStr + '</div>' +
             '</div>' +
+            (washoutIsActive(c)
+                ? '<div class="cyc-washout-chip">⏳ Washout · ' + washoutDaysLeft(c) + 'd left · clear ' + washoutEndStr(c) + '</div>'
+                : '') +
         '</div>' +
         '<div style="font-size:11px;color:#71717a;font-family:\'SF Mono\',ui-monospace,monospace;text-align:right;">' +
             doses.length + '<span style="color:#52525b;font-size:9px;letter-spacing:0.1em;margin-left:3px;">DOSES</span>' +
@@ -1379,9 +1475,8 @@ function showCycleDetail(cycleId) {
         '</div>';
     }).join('');
 
-    var safeName = escapeHtml(c.peptideName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     var endCycleBtn = c.status === 'active'
-        ? '<div style="padding:14px 18px 0;"><button class="cyc-end-cycle-btn" onclick="if(confirm(\'End ' + safeName + ' cycle?\'))endCycle(\'' + c.id + '\')">End Cycle</button></div>'
+        ? '<div style="padding:14px 18px 0;"><button class="cyc-end-cycle-btn" onclick="promptEndCycle(\'' + c.id + '\')">End Cycle</button></div>'
         : '';
 
     feedEl.style.display   = 'none';
@@ -1499,11 +1594,31 @@ document.getElementById('start-cycle-form').addEventListener('submit', function(
     var weeks = parseInt(document.getElementById('sc-weeks').value, 10);
     var date  = document.getElementById('sc-date').value || localDateStr();
     if (!pid || !weeks || weeks < 1) { alert('Pick a peptide and a duration in weeks.'); return; }
+    // Warn (don't block) if a same-class washout is still running.
+    var startP = (appData.peptides || []).find(function(x) { return x.id === pid; });
+    var cls = startP ? peptideClassFromName(startP.name) : null;
+    var wo = activeWashoutForClass(cls);
+    if (wo) {
+        var msg = classLabel(cls) + ' washout is still active until ' + washoutEndStr(wo) +
+            ' (' + washoutDaysLeft(wo) + 'd left, from ' + wo.peptideName + ').\n\nStart this cycle anyway?';
+        if (!confirm(msg)) return;
+    }
     var c = startCycle(pid, date, weeks);
     if (!c) { alert('Could not start the cycle.'); return; }
     closeModal('start-cycle-modal');
     renderSupply();
     renderCycles();
+});
+
+// Washout prompt buttons (end-cycle modal).
+document.getElementById('washout-confirm-btn').addEventListener('click', function() {
+    var w = parseInt(document.getElementById('washout-weeks').value, 10) || 0;
+    var id = _washoutCycleId; _washoutCycleId = null;
+    if (id) endCycle(id, w);
+});
+document.getElementById('washout-skip-btn').addEventListener('click', function() {
+    var id = _washoutCycleId; _washoutCycleId = null;
+    if (id) endCycle(id, 0);
 });
 
 // openCycleModal: redirect to inline detail so endCycle closeModal('cycle-modal') stays safe

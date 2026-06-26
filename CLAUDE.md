@@ -33,8 +33,8 @@ multi-user cloud sync. **Vanilla JS, no framework, no build step.**
        times out). Override `window.alert`/`window.confirm` before calling code
        that uses them.
 4. **Bump versions** (cache-busting — required or users get stale code):
-   - In `index.html`, bump every `?v=N` (all `<script>`/`<link>`). Currently **v27**.
-   - In `sw.js`, bump `CACHE = 'pepbros-vN'`. Currently **pepbros-v42**.
+   - In `index.html`, bump every `?v=N` (all `<script>`/`<link>`). Currently **v32**.
+   - In `sw.js`, bump `CACHE = 'pepbros-vN'`. Currently **pepbros-v47**.
    - If you add a new asset, also add it to the `ASSETS` array in `sw.js`.
 5. Commit with a descriptive message + trailer, then push:
    ```
